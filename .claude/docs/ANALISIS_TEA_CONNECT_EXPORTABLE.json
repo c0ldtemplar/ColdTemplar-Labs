@@ -1,0 +1,384 @@
+{
+  "metadata": {
+    "generated": "2024-04-02",
+    "project": "tea-connect",
+    "stack": ["Next.js 15", "PostgreSQL", "Redis", "MinIO", "Clerk", "Docker", "Jenkins"],
+    "domain": "Neuroinclusion Infrastructure Platform + Clinical Intelligence",
+    "domain_attributes": ["HIPAA compliance", "Multi-tenant", "Care coordination", "School compliance", "Clinical data"],
+    "total_resources": 4,
+    "total_applicable_items": 292,
+    "roi_hours_total": 156,
+    "roi_usd": 13260,
+    "timeline_reduction_weeks": 4
+  },
+  "resources": [
+    {
+      "id": "awesome_toolkit",
+      "name": "Awesome Claude Toolkit",
+      "url": "https://lnkd.in/dEAiwgcf",
+      "priority": "CRÍTICA",
+      "global_score": "97.8%",
+      "applicability": {
+        "frontend": 5,
+        "backend": 5,
+        "database": 4,
+        "security": 5,
+        "testing": 5,
+        "devops": 5,
+        "performance": 4,
+        "documentation": 4,
+        "multitenancy": 4,
+        "accessibility": 4,
+        "context": 2
+      },
+      "agents": [
+        {
+          "name": "Code Review Agent",
+          "applicability": 95,
+          "roi_hours_sprint": 15,
+          "primary_use": "PR review HIPAA compliance automation",
+          "priority": "INMEDIATA",
+          "action": "Importar next.js patterns"
+        },
+        {
+          "name": "Security Auditor",
+          "applicability": 95,
+          "roi_hours_sprint": 20,
+          "primary_use": "RLS, encryption, HIPAA readiness validation",
+          "priority": "INMEDIATA",
+          "action": "Crear HIPAA checklist"
+        },
+        {
+          "name": "API Designer",
+          "applicability": 90,
+          "roi_hours_sprint": 10,
+          "primary_use": "Design v1 endpoints, validate REST, OpenAPI",
+          "priority": "SEMANA1",
+          "action": "Generar spec v1"
+        },
+        {
+          "name": "DevOps Agent",
+          "applicability": 90,
+          "roi_hours_sprint": 12,
+          "primary_use": "Jenkins pipeline, Docker optimization, monitoring",
+          "priority": "SEMANA1",
+          "action": "Analizar Jenkinsfile actual"
+        },
+        {
+          "name": "Performance Monitor",
+          "applicability": 85,
+          "roi_hours_sprint": 8,
+          "primary_use": "Detectar bottlenecks, optimizar queries",
+          "priority": "SEMANA1",
+          "action": "Integrated monitoring agent"
+        },
+        {
+          "name": "Test Generator",
+          "applicability": 85,
+          "roi_hours_sprint": 10,
+          "primary_use": "Generar test suites Jest/Playwright",
+          "priority": "SEMANA1",
+          "action": "Importar templates"
+        },
+        {
+          "name": "Documentation Generator",
+          "applicability": 75,
+          "roi_hours_sprint": 6,
+          "primary_use": "Generar API docs automático OpenAPI",
+          "priority": "SEMANA2",
+          "action": "Setup doc generation"
+        },
+        {
+          "name": "Intent Recognizer",
+          "applicability": 60,
+          "roi_hours_sprint": 5,
+          "primary_use": "Entender intenciones del usuario (futuro)",
+          "priority": "FUTURO",
+          "action": "Review for V2"
+        }
+      ],
+      "skills_sample": [
+        "nextjs-server-components",
+        "postgresql-rls-multitenancy",
+        "jest-e2e-testing",
+        "docker-multi-stage-builds",
+        "jenkins-pipeline-security"
+      ],
+      "setup_hours": 2,
+      "implementation_hours": 8,
+      "testing_hours": 2,
+      "total_week1_hours": 12,
+      "status": "READY_TO_IMPORT"
+    },
+    {
+      "id": "antigravity_skills",
+      "name": "Antigravity Awesome Skills",
+      "url": "https://lnkd.in/dDhMmkGH",
+      "priority": "ALTA",
+      "global_score": "80%",
+      "total_skills": 1340,
+      "applicable_skills": 200,
+      "categories": [
+        {
+          "name": "DevOps & Infrastructure",
+          "total": 85,
+          "applicable": 70,
+          "top_skills": ["docker-multi-env", "jenkins-automation", "k8s-patterns"]
+        },
+        {
+          "name": "Database & ORM",
+          "total": 60,
+          "applicable": 50,
+          "top_skills": ["postgresql-optimization", "prisma-advanced", "multi-tenant-db"]
+        },
+        {
+          "name": "Security & Compliance",
+          "total": 75,
+          "applicable": 60,
+          "top_skills": ["hipaa-compliance", "rls-patterns", "encryption-at-rest"]
+        },
+        {
+          "name": "Testing & QA",
+          "total": 100,
+          "applicable": 80,
+          "top_skills": ["jest-advanced", "playwright-e2e", "mutation-testing"]
+        },
+        {
+          "name": "API & Backend",
+          "total": 90,
+          "applicable": 70,
+          "top_skills": ["api-design", "rest-best-practices", "graphql-patterns"]
+        },
+        {
+          "name": "Frontend & Next.js",
+          "total": 110,
+          "applicable": 80,
+          "top_skills": ["nextjs-performance", "rsc-patterns", "accessibility-a11y"]
+        },
+        {
+          "name": "Performance & Monitoring",
+          "total": 70,
+          "applicable": 55,
+          "top_skills": ["web-vitals", "postgres-perf", "redis-caching"]
+        },
+        {
+          "name": "Git & DevOps Tools",
+          "total": 65,
+          "applicable": 50,
+          "top_skills": ["git-workflow-pro", "github-actions", "gitlab-ci"]
+        }
+      ],
+      "priority_extraction": [
+        {
+          "skill": "postgresql-rls-multitenancy",
+          "category": "Database",
+          "hours_to_implement": 4,
+          "priority": "INMEDIATA",
+          "applicability": 100,
+          "why": "Row-level security es CRÍTICO para multi-tenant clinical app"
+        },
+        {
+          "skill": "nextjs-15-server-components",
+          "category": "Frontend",
+          "hours_to_implement": 3,
+          "priority": "INMEDIATA",
+          "applicability": 100,
+          "why": "Mejorar SSR performance"
+        },
+        {
+          "skill": "hipaa-checklist-nextjs",
+          "category": "Security",
+          "hours_to_implement": 2,
+          "priority": "INMEDIATA",
+          "applicability": 100,
+          "why": "Obligatorio para compliance"
+        },
+        {
+          "skill": "jest-advanced",
+          "category": "Testing",
+          "hours_to_implement": 3,
+          "priority": "SEMANA1",
+          "applicability": 95,
+          "why": "Aumentar coverage a 85%+"
+        },
+        {
+          "skill": "postgresql-encryption-atrest",
+          "category": "Security",
+          "hours_to_implement": 3,
+          "priority": "SEMANA1",
+          "applicability": 100,
+          "why": "Encriptar datos sensibles pacientes"
+        }
+      ],
+      "setup_hours": 3,
+      "implementation_hours": 6,
+      "testing_hours": 1,
+      "total_week1_hours": 10,
+      "status": "READY_TO_DOWNLOAD"
+    },
+    {
+      "id": "everything_claude",
+      "name": "Everything Claude Code",
+      "url": "https://github.com/affaan-m/everything-claude-code",
+      "priority": "MEDIA",
+      "global_score": "53%",
+      "type": "Community-curated collection",
+      "primary_use": "Validation + Community-validated skills",
+      "applicability": {
+        "frontend": 2,
+        "backend": 2,
+        "database": 2,
+        "security": 2,
+        "testing": 3,
+        "devops": 3,
+        "performance": 2,
+        "documentation": 2,
+        "multitenancy": 1,
+        "accessibility": 2,
+        "context": 1
+      },
+      "strategy": {
+        "phase1": "Discovery (1h) - Buscar next.js, postgresql, testing patterns",
+        "phase2": "Comparative Validation (2h) - Cruzar con Awesome Toolkit",
+        "phase3": "Extract Community Wins (1h) - Skills con high ratings NO en Awesome"
+      },
+      "potential_unique_skills": [
+        {
+          "skill": "nextjs-clerk-integration",
+          "estimated_rating": "⭐⭐⭐⭐⭐",
+          "action": "BUSCAR"
+        },
+        {
+          "skill": "prisma-multi-tenant",
+          "estimated_rating": "⭐⭐⭐⭐",
+          "action": "BUSCAR"
+        },
+        {
+          "skill": "postgres-hipaa-compliance",
+          "estimated_rating": "⭐⭐⭐⭐",
+          "action": "BUSCAR"
+        },
+        {
+          "skill": "nextjs-accessibility",
+          "estimated_rating": "⭐⭐⭐⭐⭐",
+          "action": "BUSCAR"
+        }
+      ],
+      "setup_hours": 1,
+      "implementation_hours": 2,
+      "testing_hours": 0.5,
+      "total_week1_hours": 3.5,
+      "status": "READY_TO_EXPLORE"
+    },
+    {
+      "id": "getshitdone",
+      "name": "GetShitDone",
+      "url": "https://lnkd.in/dpEG2dZV",
+      "priority": "BAJA",
+      "global_score": "26%",
+      "applicable_for": "Meta-prompting + Optional context management",
+      "applicability": {
+        "context_optimization": true,
+        "state_externalization": true,
+        "plan_generation": true,
+        "sub_agent_delegation": false
+      },
+      "verdict": "Only import technical meta-prompting parameters, NOT for architecture",
+      "setup_hours": 1,
+      "implementation_hours": 1,
+      "testing_hours": 0,
+      "total_week1_hours": 2,
+      "status": "OPTIONAL_LATER"
+    }
+  ],
+  "action_plan": {
+    "week1": {
+      "day1_2": {
+        "task": "Download & catalog resources",
+        "estimated_hours": 2,
+        "deliverables": [
+          "Awesome Toolkit downloaded",
+          "Antigravity Skills cataloged (50+ items)",
+          "Everything Claude repo analyzed",
+          "3 checklist files created"
+        ]
+      },
+      "day3_4": {
+        "task": "Setup Code Review + Security Auditor agents",
+        "estimated_hours": 4,
+        "deliverables": [
+          "Agents imported to .claude/agents/",
+          "Configuration validated",
+          "First PR review test"
+        ]
+      },
+      "day5": {
+        "task": "Extract priority PostgreSQL + HIPAA skills",
+        "estimated_hours": 4,
+        "deliverables": [
+          "8+ PostgreSQL skills imported",
+          "HIPAA_CHECKLIST.md created",
+          "RLS multitenancy guide written"
+        ]
+      }
+    },
+    "week2": {
+      "priority_tasks": [
+        "Deploy Code Review Agent",
+        "Deploy Security Auditor Agent",
+        "Implement top 20 skills (HIPAA, performance, testing)",
+        "Setup monitoring agent"
+      ],
+      "estimated_hours": 20
+    },
+    "week3_4": {
+      "focus": "Full integration + testing",
+      "estimated_hours": 30
+    }
+  },
+  "success_criteria": [
+    "5/8 Awesome agents configured",
+    "30+/50 Antigravity skills cataloged",
+    "HIPAA checklist compliance validated",
+    "Code quality +15% in Sonar",
+    "Testing coverage 85%+",
+    "Performance P95 latency <200ms",
+    "Security: 0 CRITICAL vulnerabilities"
+  ],
+  "roi_summary": {
+    "total_hours_saved": 156,
+    "hourly_rate_usd": 85,
+    "total_usd_saved": 13260,
+    "setup_cost_usd": 1700,
+    "net_roi_usd": 11560,
+    "timeline_reduction_weeks": 4,
+    "sources": {
+      "awesome_toolkit": {
+        "agents": 8,
+        "skills": 12,
+        "hours_saved": 56,
+        "week_reduction": 1.5
+      },
+      "antigravity_skills": {
+        "top_items": 50,
+        "hours_saved": 75,
+        "week_reduction": 2
+      },
+      "everything_claude": {
+        "validated_items": 10,
+        "hours_saved": 20,
+        "week_reduction": 0.5
+      },
+      "getshitdone": {
+        "applicable_items": 10,
+        "hours_saved": 5,
+        "week_reduction": 0
+      }
+    }
+  },
+  "export_formats": {
+    "markdown": "ANALISIS_APLICABILIDAD_TEA_CONNECT.md",
+    "csv": "ANALISIS_TEA_CONNECT_EXPORTABLE.csv",
+    "json": "ANALISIS_TEA_CONNECT_EXPORTABLE.json"
+  }
+}

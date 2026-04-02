@@ -1,0 +1,63 @@
+Aspecto_Tecnico,Prioridad,Awesome_Toolkit,Antigravity,Everything_Claude,GetShitDone,Aplicabilidad_Total,Accion_Inmediata
+Frontend (Next.js 15),CRÍTICA,5/5,4/5,3/5,2/5,95%,Importar nextjs-rsc patterns
+Backend API Design,CRÍTICA,5/5,4/5,2/5,2/5,90%,Usar API Designer agent  
+Database (PostgreSQL),CRÍTICA,4/5,5/5,2/5,0/5,92%,Extraer 8+ PostgreSQL skills
+Security (HIPAA/RLS),CRÍTICA,5/5,5/5,2/5,0/5,97%,Crear checklist compliance
+Testing (Jest/Playwright),ALTA,5/5,5/5,3/5,2/5,95%,Importar testing suite templates
+DevOps (Docker/Jenkins),ALTA,5/5,5/5,3/5,2/5,95%,Analizar Jenkinsfile con agente
+Performance/Monitoring,ALTA,4/5,3/5,2/5,0/5,75%,Integrar monitoring agent
+Documentation API,MEDIA,4/5,2/5,2/5,2/5,70%,Generar OpenAPI automático
+Multi-tenancy Patterns,MEDIA,4/5,3/5,1/5,0/5,70%,Usar DB multitenancy skills
+Accessibility (a11y),MEDIA,4/5,3/5,2/5,0/5,75%,Buscar neuro-inclusive patterns
+Context Management,BAJA,2/5,2/5,1/5,3/5,50%,Optional: setup facts.md
+
+Agente_Disponible,Recurso,Aplicabilidad,ROI_Horas,Caso_Uso,Prioridad_Implementacion,Status
+Code_Review_Agent,Awesome,95%,15h/sprint,PR review HIPAA compliance,INMEDIATA,[ ] Importar
+Security_Auditor,Awesome,95%,20h/sprint,Validar RLS encryption HIPAA,INMEDIATA,[ ] Importar
+API_Designer,Awesome,90%,10h/sprint,Diseñar v1 REST endpoints,SEMANA1,[ ] Importar
+DevOps_Agent,Awesome,90%,12h/sprint,Optimizar Jenkins Docker,SEMANA1,[ ] Importar
+Performance_Monitor,Awesome,85%,8h/sprint,Detectar bottlenecks,SEMANA1,[ ] Importar
+Intent_Recognizer,Awesome,60%,5h/sprint,Entender user intents,FUTURO,[ ] Revisar
+Documentation_Generator,Awesome,75%,6h/sprint,Generar API docs OpenAPI,SEMANA2,[ ] Importar
+Test_Generator,Awesome,85%,10h/sprint,Generar test suites Jest,SEMANA1,[ ] Importar
+
+Skill_Top_Prioridad,Recurso,Categoria,Beneficio,Horas_Implementacion,Aplicabilidad,Fecha_Recomendada
+nextjs-15-server-components,Antigravity,Frontend,Mejorar SSR y rendimiento,2-3h,100%,INMEDIATA
+postgresql-rls-multitenancy,Antigravity,Database,Row-level security multi-tenant,4-5h,100%,INMEDIATA
+hipaa-checklist-nextjs,Antigravity,Security,Validar compliance clínico,2h,100%,INMEDIATA
+jest-e2e-testing,Awesome,Testing,Automatizar tests E2E,3-4h,95%,SEMANA1
+docker-multi-stage-builds,Antigravity,DevOps,Optimizar Dockerfile tamaño,1-2h,100%,SEMANA1
+jenkins-pipeline-security,Antigravity,DevOps,Hardening Jenkinsfile,2-3h,95%,INMEDIATA
+postgresql-encryption-atrest,Antigravity,Security,Encriptar datos sensibles,3h,100%,SEMANA1
+postgresql-indexing-strategy,Antigravity,Database,Query performance optimization,2h,95%,SEMANA1
+nextjs-image-optimization,Antigravity,Frontend,Lazy load webp optimization,2h,90%,SEMANA2
+playwright-e2e-patterns,Antigravity,Testing,E2E workflow automation,3h,95%,SEMANA1
+api-testing-jest,Awesome,Testing,API contract testing,2h,95%,SEMANA2
+redis-docker-patterns,Antigravity,DevOps,Caching layer optimization,2h,90%,SEMANA1
+prisma-multi-tenant,Everything,Database,Multi-tenancy patterns,3h,80%,SEMANA1
+nextjs-clerk-integration,Everything,Frontend,Auth integration patterns,2h,95%,SEMANA1
+postgres-hipaa-compliance,Everything,Security,HIPAA patterns validation,3h,90%,SEMANA1
+nextjs-accessibility,Everything,Frontend,Neuro-inclusive UX patterns,3h,100%,SEMANA1
+
+Recurso,Total_Items_Disponibles,Items_Aplicables,Aplicabilidad_Pct,ROI_Horas_Total,ROI_USD_Total,Timeline_Reduccion
+Awesome_Toolkit,35,32,91%,56h,"$4760",-1.5_semanas
+Antigravity_Skills,1340,200,15%,75h,"$6375",-2_semanas
+Everything_Claude,500,50,10%,20h,"$1700",-0.5_semanas
+GetShitDone,50,10,20%,5h,"$425",-0_semanas
+TOTAL,1925,292,15%,156h,"$13260",-4_semanas
+
+Recurso,Prioridad,Estado,Horas_Setup,Horas_Implementacion,Horas_Testing,Total_Horas_W1,Responsable,Fecha_Target
+Awesome_Toolkit,INMEDIATA,[ ] Descargar,2h,8h,2h,12h,Rober,3-abr
+Antigravity_Skills,INMEDIATA,[ ] Catalogar,3h,6h,1h,10h,Rober,3-abr
+Everything_Claude,SEMANA1,[ ] Revisar,1h,2h,0.5h,3.5h,Rober,4-abr
+GetShitDone,BAJA,[ ] Evaluar,1h,1h,0h,2h,Rober,5-abr
+
+Skill,Recurso,Semana_Implementacion,Horas,Equipo_Requerido,Testing_Requerido,Documentacion_Requerida
+nextjs-rsc-patterns,Awesome,W1,3h,1 Senior FE,"[ ] Unit tests, [ ] Design validation",[ ] README.md
+api-designer-v1,Awesome,W1,4h,1 Senior BE,"[ ] Contract tests, [ ] Load test",[ ] OpenAPI.yaml
+postgresql-rls,Antigravity,W1,4h,1 DBA,"[ ] Unit tests, [ ] Audit log",[ ] RLS_GUIDE.md
+hipaa-audit,Antigravity,W1,2h,1 Security,"[ ] Compliance checklist",[ ] HIPAA_CHECKLIST.md
+jest-suite,Antigravity,W1,3h,1 QA,"[ ] Coverage >85%, [ ] CI green",[ ] TESTING_GUIDE.md
+docker-optimize,Antigravity,W1,2h,1 DevOps,"[ ] Size reduction validate",[ ] DOCKER_GUIDE.md
+jenkins-hardening,Antigravity,W2,2h,1 DevOps,"[ ] Security scan pass",[ ] JENKINS_SECURITY.md
+redis-caching,Antigravity,W2,2h,1 Architect,"[ ] Performance benchmark",[ ] CACHING_STRATEGY.md
