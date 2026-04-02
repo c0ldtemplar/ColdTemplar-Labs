@@ -208,7 +208,59 @@ awesome-claude-toolkit/
 
 ---
 
-## 📊 Matriz de Decisión: Qué Integrar Primero
+## Everything Claude Code - Curated Resources Hub
+
+**URL:** https://github.com/affaan-m/everything-claude-code  
+**Tipo:** Community-curated collection  
+**Estado:** PENDIENTE REVISIÓN 📋
+
+### Característica Principal
+
+Hub comunitario que indexa y organiza recursos de Claude Code:
+- Skills mejor evaluados
+- Agentes probados en comunidad
+- Patrones recomendados
+- Best practices
+- Lecciones aprendidas
+
+### Ventaja vs Awesome Toolkit
+
+| Aspecto | Awesome Toolkit | Everything Claude Code |
+|--------|-----------------|------------------------|
+| **Contenido** | Exhaustivo (135+) | Curado (top picks) |
+| **Actualización** | Oficial | Community-driven |
+| **Validación** | Por mantenedores | Por comunidad (upvotes) |
+| **Ejemplos** | Técnicos | Prácticos + reviews |
+| **Aprendizaje** | Referencia | Tutorial-oriented |
+
+### Estrategia de Integración
+
+```
+FASE 1: Usar como validación
+  - Revisar Awesome Toolkit
+  - Cruzar con Everything Claude
+  - Validar: ¿skills/agentes también están aquí?
+  - Si SÍ → Indican importancia comunitaria
+  - Si NO → Evaluar si vale la pena aun
+
+FASE 2: Extraer patrones únicos
+  - Buscar skills/agentes NO en Awesome
+  - Evaluar calidad comunitaria (upvotes)
+  - Si rating alto → Considerar incluir
+
+FASE 3: Participar en comunidad
+  - Futuro: Contribuir nuestros skills
+  - Share ColdTemplar learnings
+  - Validar nuestros agentes con comunidad
+```
+
+### Aplicable para ColdTemplar
+
+✅ **Muy Recomendado** como validador de decisiones teóricas  
+✅ **Good for** encontrar skills con community validation  
+✅ **Use case** cruzar información con Awesome Toolkit  
+
+---
 
 ```
 ┌─────────────────────────────────────────────────────────┐

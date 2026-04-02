@@ -37,6 +37,15 @@
   - 📅 Fecha revisión: PENDIENTE
   - ✅ IMPLEMENTABLE: Sí, como base
 
+- [ ] **Everything Claude Code** (https://github.com/affaan-m/everything-claude-code)
+  - ⭐ Curated resources hub
+  - 📝 Estado: PENDIENTE REVISIÓN
+  - 📌 Prioridad: CRÍTICA (curación comunitaria)
+  - 📁 Aplicable: Skills, agentes, patterns, best practices
+  - 💡 Idea: Complementar Awesome Toolkit, ver patrones nuevos
+  - 📅 Fecha revisión: PENDIENTE
+  - ✅ IMPLEMENTABLE: Sí, como referencia cruzada
+
 ---
 
 ## Tier 2: RECOMENDADOS (Medium Value)
