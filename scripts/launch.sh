@@ -35,18 +35,23 @@ fi
 
 if ! timeout 2 ollama list &>/dev/null; then
     echo -e "${YELLOW}⚠️  Ollama no está ejecutándose${NC}"
-    echo -e "${BLUE}💡 Inicia Ollama en otra terminal:${NC}"
-    echo -e "   ${GREEN}ollama serve${NC}"
-    echo ""
-    read -p "¿Deseas que lo inicie automáticamente? (s/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Ss]$ ]]; then
-        nohup ollama serve &>/tmp/ollama.log &
-        echo -e "${GREEN}✅ Ollama iniciado en background${NC}"
-        sleep 3
+    echo -e "${BLUE} Levantando Ollama automáticamente (Zero-Touch)...${NC}"
+    OLLAMA_MODELS=~/.ollama/models nohup ollama serve > /tmp/ollama.log 2>&1 &
+    sleep 3
+    echo -e "${GREEN}✅ Ollama iniciado en background${NC}"
+fi
+
+# Verificar si n8n está corriendo (opcional pero recomendado para automatización)
+if curl -s http://localhost:5678/healthz > /dev/null; then
+    echo -e "${GREEN}✅ n8n (Agente Autónomo) está EN LÍNEA${NC}"
+else
+    echo -e "${YELLOW}⚠️  n8n no está corriendo en el puerto 5678.${NC}"
+    echo -e "${BLUE}🔄 Levantando n8n vía Docker...${NC}"
+    if [ -f "$HOME/ColdTemplar-Labs/docker-compose.yml" ]; then
+        cd "$HOME/ColdTemplar-Labs" && docker-compose up -d
+        echo -e "${GREEN}✅ n8n iniciado en background.${NC}"
     else
-        echo -e "${RED}Abortado. Inicia Ollama manualmente.${NC}"
-        exit 1
+        echo -e "${YELLOW}⚠️  No se encontró docker-compose.yml. Las tareas digitales no funcionarán.${NC}"
     fi
 fi
 
@@ -64,14 +69,19 @@ echo -e "${GREEN}✅ Todas las dependencias verificadas${NC}"
 echo ""
 
 # Modo de operación
-echo -e "${BLUE}Elige modo de operación:${NC}"
-echo "  1) Interactivo (por defecto)"
-echo "  2) Modo demo (pregunta de prueba)"
-echo "  3) Modo background (sin TTY)"
-echo ""
-read -p "Opción [1-3]: " -n 1 -r mode
-mode=${mode:-1}
-echo ""
+if [ -n "$1" ]; then
+    mode=$1
+    echo -e "${BLUE}ℹ️  Modo parametrizado detectado: $mode${NC}"
+else
+    echo -e "${BLUE}Elige modo de operación:${NC}"
+    echo "  1) Interactivo (por defecto)"
+    echo "  2) Modo demo (pregunta de prueba)"
+    echo "  3) Modo background (sin TTY)"
+    echo ""
+    read -p "Opción [1-3]: " -n 1 -r mode
+    mode=${mode:-1}
+    echo ""
+fi
 echo ""
 
 # Ejecutar según el modo

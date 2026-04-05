@@ -92,7 +92,7 @@ Cada sesión se guarda automáticamente en:
 
 Para instalar las dependencias Python:
 ```bash
-pip install sounddevice scipy faster-whisper
+pip install sounddevice scipy faster-whisper requests
 ```
 
 ---

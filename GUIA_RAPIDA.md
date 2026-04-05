@@ -234,4 +234,3 @@ ct
 ```
 
 **Y disfruta tu asistente inteligente en español.**
-

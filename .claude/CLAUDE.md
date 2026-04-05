@@ -90,6 +90,7 @@ Cada agente tiene un propósito específico.
 2. **LLM** (Language Model) → Ollama + Llama3
 3. **TTS** (Text-to-Speech) → Piper (voz femenina)
 4. **Intent Detection** → Custom NLP en español
+5. **Autonomous Agent** → n8n (Integración con APIs, Email, Notion, etc.)
 
 ---
 
@@ -239,10 +240,16 @@ Ver: `.claude/docs/CHECKLIST_RECURSOS.md`
 - [ ] Dashboard web
 - [ ] Control de Home Automation
 - [ ] Mobile app
+- [x] Integración como Agente Autónomo (n8n)
 
 ---
 
 ## 📝 Logs de Cambios
+
+### v2.1 (Abril 2026)
+- ✅ Integración con n8n para tareas digitales automatizadas
+- ✅ Docker Compose para infraestructura de automatización local
+- ✅ Capacidad de enviar correos y gestionar tareas vía voz
 
 ### v2.0 (2 de abril de 2026)
 - ✅ Español nativo completo

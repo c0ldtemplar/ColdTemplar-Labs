@@ -1,0 +1,129 @@
+{
+  "name": "ColdTemplar - Agente Autónomo (n8n)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "coldtemplar-tasks",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-node-1",
+      "name": "Webhook (Escucha de ColdTemplar)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        180,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.comando }}",
+        "options": {
+          "systemMessage": "Eres el brazo ejecutor de ColdTemplar. Eres una IA que recibe peticiones del usuario en texto y utiliza las herramientas (tools) disponibles para cumplir la orden (ej: enviar correos, agendar eventos o crear notas). Analiza el texto y decide qué herramienta usar."
+        }
+      },
+      "id": "agent-node-1",
+      "name": "Agente IA (Cerebro)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1,
+      "position": [
+        400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama3",
+        "options": {
+          "baseUrl": "http://host.docker.internal:11434"
+        }
+      },
+      "id": "ollama-node-1",
+      "name": "Ollama Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        320,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Usa esta herramienta para enviar correos electrónicos usando Gmail. Extrae del mensaje del usuario el destinatario, el asunto y el cuerpo del mensaje para ejecutar la acción."
+      },
+      "id": "gmail-tool-1",
+      "name": "Gmail Tool",
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 1,
+      "position": [
+        540,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Usa esta herramienta para crear tareas, páginas o bases de datos en Notion basándote en lo que el usuario pidió."
+      },
+      "id": "notion-tool-1",
+      "name": "Notion Tool",
+      "type": "n8n-nodes-base.notionTool",
+      "typeVersion": 1,
+      "position": [
+        720,
+        480
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook (Escucha de ColdTemplar)": {
+      "main": [
+        [
+          {
+            "node": "Agente IA (Cerebro)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente IA (Cerebro)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente IA (Cerebro)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente IA (Cerebro)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

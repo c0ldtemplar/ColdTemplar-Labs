@@ -27,7 +27,7 @@
 ### Paso 2: Copiar la URL
 
 En la pantalla siguiente, verás instrucciones. Copia la URL HTTPS que se vea así:
-```
+```text
 https://github.com/TU_USUARIO/ColdTemplar-Labs.git
 ```
 
@@ -245,4 +245,3 @@ Si quieres que otros trabajen en el proyecto:
 ---
 
 **¡Felicidades! Tu proyecto está en GitHub.** 🎉
-

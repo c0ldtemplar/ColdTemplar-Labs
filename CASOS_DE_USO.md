@@ -209,6 +209,25 @@ Generar ideas, analizar problemas, y explorar soluciones creativas.
 
 ---
 
+## ⚡ CASO 11: Asistente Autónomo (Automatización con n8n)
+
+### Descripción
+Conecta tu voz con el mundo digital. Ejecuta tareas en tus cuentas (Email, Notion, Calendario, Redes Sociales) usando n8n como puente.
+
+### Ejemplos de comandos:
+```
+"Envía un correo a mi jefe diciendo que llegaré 10 minutos tarde"
+"Crea una tarea en Notion para revisar el presupuesto mañana"
+"Agrega un nuevo evento al calendario: Reunión de diseño a las 4 pm"
+"Publica un tweet diciendo que la IA local es el futuro"
+```
+
+### Caso real:
+**Rober:** "Envía un correo al equipo de ventas pidiendo el reporte de mayo"  
+**ColdTemplar:** "Delegando la tarea a tus automatizaciones..." *(Internamente, n8n recibe el texto, extrae la intención con LLM y usa las credenciales de Gmail para enviarlo).*
+
+---
+
 ## 📋 COMANDOS ESPECIALES
 
 | Comando | Respuesta |
@@ -283,4 +302,3 @@ cat ~/ColdTemplar-Labs/logs/sesion_YYYYMMDD_HHMMSS.json | jq
 ---
 
 **¡Ahora tienes un asistente inteligente en español que entiende, responde y ayuda!** 🎉
-

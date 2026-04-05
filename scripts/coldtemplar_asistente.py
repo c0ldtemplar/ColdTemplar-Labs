@@ -13,13 +13,25 @@ import os
 import sys
 import json
 import unicodedata
+import requests
 import difflib
+import queue
 from faster_whisper import WhisperModel
 from datetime import datetime
 from pathlib import Path
 
 class ColdTemplarAssistant:
-    """Asistente de voz inteligente con contexto y logging"""
+    """
+    🤖 Clase Principal: ColdTemplarAssistant
+    
+    ¿Por qué? 
+    Orquesta todo el ciclo de vida del asistente local. Conecta el micrófono (entrada),
+    Whisper (transcripción), Llama 3 (razonamiento) y Piper (salida de voz).
+    
+    💡 Ejemplo de instanciación:
+        asistente = ColdTemplarAssistant()
+        asistente.run_interactive()
+    """
     
     def __init__(self):
         # Configuración de audio
@@ -71,65 +83,138 @@ class ColdTemplarAssistant:
         self.exit_commands = {"adiós", "terminar", "salir", "apagar", "adios"}
         
         print("✅ Sistema listo.\n")
+
+    def apply_voice_filter(self, audio_data, fs):
+        """
+        🎧 Aplica un filtro pasa-banda matemático para reducir ruido de fondo.
+        Elimina zumbidos graves (<80Hz) y siseos agudos (>7000Hz).
+        Mantiene la latencia ultrabaja (ms) usando matemáticas puras (SciPy).
+        """
+        # Filtro Butterworth de orden 4 (rango de voz principal)
+        b, a = signal.butter(4, [80, 7000], btype='bandpass', fs=fs)
+        return signal.filtfilt(b, a, audio_data, axis=0)
     
+    def _record_with_vad(self, device_to_use):
+        """Graba audio usando un stream continuo hasta detectar silencio (VAD)."""
+        q = queue.Queue()
+        
+        def audio_callback(indata, frames, time, status):
+            q.put(indata.copy())
+
+        recording_chunks = []
+        silence_frames = 0
+        max_frames = int(15 * self.fs_capture) # Máximo absoluto de seguridad: 15 seg
+        silence_limit_frames = int(1.5 * self.fs_capture) # Cortar tras 1.5 seg de silencio
+        total_frames = 0
+        has_spoken = False
+        
+        with sd.InputStream(samplerate=self.fs_capture, channels=1, device=device_to_use, callback=audio_callback):
+            while total_frames < max_frames:
+                chunk = q.get()
+                recording_chunks.append(chunk)
+                total_frames += len(chunk)
+                
+                peak = np.max(np.abs(chunk))
+                # Umbral de energía para considerar que hay voz humana
+                if peak < 0.015:
+                    silence_frames += len(chunk)
+                else:
+                    silence_frames = 0
+                    has_spoken = True
+                    
+                # Si el usuario ya habló y hace una pausa larga, cortar el stream
+                if has_spoken and silence_frames >= silence_limit_frames:
+                    break
+                # Si pasan 5 segundos de silencio total al inicio, cancelar
+                if not has_spoken and total_frames >= int(5 * self.fs_capture):
+                    break
+
+        return np.concatenate(recording_chunks, axis=0)
+
     def listen(self):
-        """Captura audio del micrófono"""
-        print("🎤 Escuchando (5 seg)...")
+        """
+        🎤 Captura audio del micrófono local con detección de voz (VAD).
+        
+        ¿Por qué? 
+        En lugar de forzar un límite fijo, el asistente escucha de manera continua 
+        hasta que detecta una pausa natural en la voz, mejorando la latencia y experiencia.
+        
+        💡 Ejemplo de salida esperada en terminal:
+            🎤 Escuchando... (Habla ahora, me detendré al hacer una pausa)
+            💾 WAV creado en /tmp/orden_coldtemplar.wav (16000Hz)
+        """
+        print("🎤 Escuchando... (Habla ahora, me detendré al hacer una pausa)")
         try:
             print(f"🎧 Usando dispositivo id={self.device_id} tasa={self.fs_capture}Hz")
-            recording = sd.rec(int(self.listen_seconds * self.fs_capture), 
-                             samplerate=self.fs_capture, channels=1, device=self.device_id)
-            sd.wait()
-
-            peak = float(np.max(np.abs(recording)))
-            print(f"📈 Pico de señal raw: {peak:.6f}")
-            if peak < 0.01:
-                print("⚠️  Atención: señal muy baja; revisa silencio, ganancia o micrófono apagado")
-
-            # Resamplear a 16000 Hz para Whisper
-            if self.fs_capture != self.fs_whisper:
-                num_samples = int(len(recording) * self.fs_whisper / self.fs_capture)
-                recording = signal.resample(recording, num_samples)
-
-            write(self.audio_file, self.fs_whisper, (recording * 32767).astype(np.int16))
-            print(f"💾 WAV creado en {self.audio_file} ({self.fs_whisper}Hz)")
-            return True
+            recording = self._record_with_vad(self.device_id)
 
         except Exception as e:
             print(f"❌ Error al grabar en dispositivo primario: {e}")
             try:
                 print("🔁 Reintentando con dispositivo por defecto")
-                recording = sd.rec(int(self.listen_seconds * self.fs_capture), 
-                                 samplerate=self.fs_capture, channels=1, device='default')
-                sd.wait()
-                peak = float(np.max(np.abs(recording)))
-                print(f"📈 Pico de señal raw (fallback): {peak:.6f}")
-
-                if self.fs_capture != self.fs_whisper:
-                    num_samples = int(len(recording) * self.fs_whisper / self.fs_capture)
-                    recording = signal.resample(recording, num_samples)
-
-                write(self.audio_file, self.fs_whisper, (recording * 32767).astype(np.int16))
-                print(f"💾 WAV fallback creado en {self.audio_file} ({self.fs_whisper}Hz)")
-                return True
+                recording = self._record_with_vad('default')
             except Exception as e2:
                 print(f"❌ Error alternativo: {e2}")
                 return False
+                
+        peak = float(np.max(np.abs(recording)))
+        print(f"📈 Pico de señal final: {peak:.6f}")
+        if peak < 0.01:
+            print("⚠️  Atención: no se detectó voz clara. Señal muy baja.")
+            return False
+            
+        # Resamplear a 16000 Hz para Whisper
+        if self.fs_capture != self.fs_whisper:
+            num_samples = int(len(recording) * self.fs_whisper / self.fs_capture)
+            recording = signal.resample(recording, num_samples)
+
+        # Aplicar filtro de reducción de ruido ultrarrápido
+        recording = self.apply_voice_filter(recording, self.fs_whisper)
+
+        write(self.audio_file, self.fs_whisper, (recording * 32767).astype(np.int16))
+        print(f"💾 WAV creado ({self.fs_whisper}Hz) - Duración de captura: {len(recording)/self.fs_whisper:.1f}s")
+        return True
     
     def transcribe(self):
-        """Convierte audio a texto (Speech-to-Text)"""
+        """
+        🧠 Convierte el audio grabado a texto (Speech-to-Text).
+        
+        ¿Por qué?
+        Utiliza Faster Whisper de forma local para traducir el archivo WAV
+        a un string en español, normalizando y tolerando ruidos de fondo.
+        
+        💡 Ejemplo de retorno:
+            "envia un correo a mi jefe"
+        """
         try:
             print("🧠 Transcribiendo...")
             segments, _ = self.model.transcribe(self.audio_file, 
                                                 beam_size=5, language="es")
             text = " ".join([seg.text for seg in segments]).strip()
+            
+            # 🛡️ Filtro de Alucinaciones (Defensive Normalization)
+            # Whisper a veces inventa sílabas sueltas o puntuación con el ruido blanco
+            texto_limpio = self.normalize_text(text).replace(" ", "")
+            if len(texto_limpio) < 2:
+                return ""
+                
             return text
         except Exception as e:
             print(f"❌ Error en transcripción: {e}")
             return ""
     
     def think(self, prompt):
-        """Genera respuesta inteligente con Ollama en español"""
+        """
+        🤖 Genera una respuesta inteligente utilizando Ollama (LLM Local).
+        
+        ¿Por qué?
+        Inyecta un system prompt estricto para forzar a Llama 3 a responder en 
+        español nativo, de forma concisa y directa (máximo 2 frases).
+        
+        💡 Ejemplo de uso:
+            respuesta = self.think("¿Cuál es la capital de Francia?")
+            # Retorna: "La capital de Francia es París."
+        """
         try:
             print("🤔 Pensando...")
             
@@ -172,7 +257,16 @@ class ColdTemplarAssistant:
             return "No pude conectar con el cerebro local. Intenta otra vez."
     
     def speak(self, text):
-        """Reproduce respuesta por voz (Text-to-Speech)"""
+        """
+        🔊 Reproduce la respuesta por voz (Text-to-Speech).
+        
+        ¿Por qué?
+        Llama al script Bash 'habla_coldtemplar.sh' que ejecuta Piper TTS 
+        para generar un audio natural sin depender de APIs en la nube.
+        
+        💡 Ejemplo de uso:
+            self.speak("Hola, soy ColdTemplar. Sistema en línea.")
+        """
         try:
             # Limpiar el texto
             text_clean = text.replace('"', '').replace('\n', ' ')[:200]
@@ -206,33 +300,63 @@ class ColdTemplarAssistant:
         return matches[0] if matches else None
 
     def process_command(self, text):
-        """Procesa comandos especiales del usuario con detección robusta en español"""
+        """
+        🔀 Procesa y enruta comandos especiales del usuario usando Fuzzy Matching.
+        
+        ¿Por qué?
+        Evita enviar comandos de acción local al LLM, ahorrando tiempo y memoria. 
+        Detecta variaciones fonéticas o errores leves del STT (ej. "habre" vs "abre").
+        
+        💡 Ejemplo de evaluación:
+            self.process_command("envia un coreo") # Retorna "automation"
+            self.process_command("que puedes hacer") # Retorna "help"
+        """
         text_norm = self.normalize_text(text)
+        words = text_norm.split()
+        
+        def contains_keyword(keywords, cutoff=0.8):
+            for kw in keywords:
+                # Coincidencia exacta de substring (muy rápida)
+                if kw in text_norm:
+                    return True
+                # Fuzzy matching para palabras individuales
+                if ' ' not in kw:
+                    if difflib.get_close_matches(kw, words, n=1, cutoff=cutoff):
+                        return True
+                # Fuzzy matching para frases (ventana deslizante)
+                else:
+                    kw_len = len(kw.split())
+                    for i in range(len(words) - kw_len + 1):
+                        window = " ".join(words[i:i+kw_len])
+                        if difflib.SequenceMatcher(None, window, kw).ratio() >= cutoff:
+                            return True
+            return False
 
         # === COMANDOS DE TERMINAR SESIÓN ===
-        exit_keywords = ["adios", "hasta luego", "terminar", "salir", "apagar", "desconectar", "nos vemos", "bye"]
-        if any(keyword in text_norm for keyword in exit_keywords):
+        if contains_keyword(["adios", "hasta luego", "terminar", "salir", "apagar", "desconectar", "nos vemos", "bye"]):
             return "exit"
 
         # === COMANDOS DE AYUDA ===
-        help_keywords = ["ayuda", "help", "que puedes hacer", "tus funciones", "como funciono", "cual es tu funcion", "instrucciones"]
-        if any(keyword in text_norm for keyword in help_keywords):
+        if contains_keyword(["ayuda", "help", "que puedes hacer", "tus funciones", "como funciono", "cual es tu funcion", "instrucciones"]):
             return "help"
 
         # === COMANDOS DE ESTADO/REPORTE ===
-        report_keywords = ["reporte", "estado", "como estoy", "diagnostico", "salud", "status", "como esta"]
-        if any(keyword in text_norm for keyword in report_keywords):
+        if contains_keyword(["reporte", "estado", "como estoy", "diagnostico", "salud", "status", "como esta"]):
             return "report"
 
         # === COMANDOS DE CONTROL DE SISTEMA ===
-        if any(x in text_norm for x in ["enciende", "apaga", "abre", "cierra", "ejecuta", "inicia"]):
+        if contains_keyword(["enciende", "apaga", "abre", "cierra", "ejecuta", "inicia"]):
             return "control"
 
         # === COMANDOS DE MULTIMEDIA ===
-        if any(x in text_norm for x in ["abre navegador", "abre chrome", "navegador", "google", "internet"]):
+        if contains_keyword(["abre navegador", "abre chrome", "navegador", "google", "internet"]):
             return "open_browser"
-        if any(x in text_norm for x in ["musica", "spotify", "cancion", "reproducir"]):
+        if contains_keyword(["musica", "spotify", "cancion", "reproducir"]):
             return "play_music"
+
+        # === COMANDOS DE AUTOMATIZACIÓN DIGITAL (n8n) ===
+        if contains_keyword(["envia un correo", "manda un email", "crea una tarea", "nuevo evento", "tuitea", "publica", "notion", "calendario"]):
+            return "automation"
 
         return None
     
@@ -245,6 +369,7 @@ class ColdTemplarAssistant:
             "• Consultar el estado del sistema (di 'reporte').\n"
             "• Abrir aplicaciones (di 'abre navegador' o 'abre aplicación').\n"
             "• Reproducir música (di 'poner música' o 'spotify').\n"
+            "• Ejecutar tareas digitales como enviar correos o crear tareas (vía n8n).\n"
             "¿En qué puedo ayudarte?"
         )
         return help_text
@@ -279,7 +404,16 @@ class ColdTemplarAssistant:
             print(f"⚠️  No se pudo guardar el log: {e}")
     
     def run_interactive(self):
-        """Bucle principal de conversación interactiva"""
+        """
+        🔄 Bucle principal de conversación interactiva (El "Main Loop").
+        
+        ¿Por qué?
+        Mantiene el asistente vivo, alternando continuamente entre escuchar, pensar 
+        y hablar, hasta que el usuario dicta un comando de salida o interrumpe.
+        
+        💡 Flujo esperado:
+            1. Escucha -> 2. Transcribe -> 3. Enruta/Piensa -> 4. Habla -> 5. Guarda Log -> (Repite)
+        """
         print("\n" + "="*60)
         print("🟢 COLDTEMPLAR ASISTENTE - Modo Interactivo")
         print("="*60)
@@ -302,7 +436,7 @@ class ColdTemplarAssistant:
                 texto_usuario = self.transcribe()
                 
                 if not texto_usuario:
-                    print("... (Silencio detectado)")
+                    print("🌫️  ... (Silencio o ruido ignorado)")
                     continue
                 
                 print(f"💬 [Tú]: {texto_usuario}")
@@ -335,6 +469,23 @@ class ColdTemplarAssistant:
                     print(f"🤖 [IA]: {respuesta}")
                     self.speak(respuesta)
                     os.system("spotify &>/dev/null &")
+                
+                elif comando == "automation":
+                    respuesta = "Delegando la tarea a tus automatizaciones..."
+                    print(f"🤖 [IA]: {respuesta}")
+                    self.speak(respuesta)
+                    
+                    # Enviar a webhook de n8n (Asegúrate de que n8n esté corriendo en este puerto)
+                    try:
+                        webhook_url = "http://localhost:5678/webhook/coldtemplar-tasks"
+                        payload = {
+                            "comando": texto_usuario,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        requests.post(webhook_url, json=payload, timeout=5)
+                        print("✅ Comando de automatización enviado exitosamente a n8n.")
+                    except Exception as e:
+                        print(f"⚠️ No se pudo conectar con n8n. ¿Está encendido? Error: {e}")
                 
                 elif comando == "control":
                     respuesta = self.think(texto_usuario)
