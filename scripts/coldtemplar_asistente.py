@@ -18,6 +18,7 @@ import requests
 import difflib
 import queue
 import sqlite3
+from faster_whisper import WhisperModel
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any
