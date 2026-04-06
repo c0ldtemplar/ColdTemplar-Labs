@@ -59,6 +59,7 @@ Thumbs.db
 ia-tools/  # External tools
 backups/
 .sixth/
+.codex
 n8n_data/  # Volumen persistente local de n8n (Contiene credenciales y flujos)
 
 # Keep logs structure but ignore session data
