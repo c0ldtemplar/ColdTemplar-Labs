@@ -4,15 +4,57 @@ services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
     container_name: coldtemplar_n8n
-    restart: unless-stopped
+    restart: always
     ports:
       - "5678:5678"
     environment:
-      - N8N_HOST=0.0.0.0
+      - N8N_HOST=localhost
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
-      - NODE_ENV=production
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Europe/Madrid # Cambia a tu zona horaria si es necesario
+      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,lodash
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=coldtemplar
+      - N8N_BASIC_AUTH_PASSWORD=securepassword123
+      - N8N_BLOCK_XML_EXTERNAL_ENTITIES=true
     volumes:
-      - ./n8n_data:/home/node/.n8n
+      - n8n_data:/home/node/.n8n
+      - ./n8n_env:/etc/n8n
+    depends_on:
+      - postgres
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - n8n-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: coldtemplar_postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=n8n
+      - POSTGRES_USER=n8n
+      - POSTGRES_PASSWORD=securepassword123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - n8n-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: coldtemplar_redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - n8n-network
+
+volumes:
+  n8n_data:
+  postgres_data:
+  redis_data:
+
+networks:
+  n8n-network:
+    driver: bridge

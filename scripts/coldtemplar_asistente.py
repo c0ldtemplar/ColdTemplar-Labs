@@ -2,6 +2,7 @@
 """
 ColdTemplar Assistant - Flujo completo de conversación inteligente
 Integra: Escucha → Transcripción → Razonamiento → Respuesta por voz
+Con sistema de memoria persistente mejorado
 """
 
 import sounddevice as sd
@@ -16,9 +17,10 @@ import unicodedata
 import requests
 import difflib
 import queue
-from faster_whisper import WhisperModel
+import sqlite3
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, Dict, List, Any
 
 class ColdTemplarAssistant:
     """
@@ -27,6 +29,7 @@ class ColdTemplarAssistant:
     ¿Por qué? 
     Orquesta todo el ciclo de vida del asistente local. Conecta el micrófono (entrada),
     Whisper (transcripción), Llama 3 (razonamiento) y Piper (salida de voz).
+    Ahora con sistema de memoria persistente mejorado.
     
     💡 Ejemplo de instanciación:
         asistente = ColdTemplarAssistant()
@@ -73,6 +76,10 @@ class ColdTemplarAssistant:
         print("⚙️  Cargando motores de IA local...")
         self.model = WhisperModel("tiny", device="cpu", compute_type="int8")
         
+        # Sistema de memoria persistente
+        self.db_path = Path.home() / "ColdTemplar-Labs" / "coldtemplar_memory.db"
+        self.init_memory_db()
+        
         # Log de sesión
         self.session_log = []
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -81,9 +88,64 @@ class ColdTemplarAssistant:
         
         # Comandos especiales
         self.exit_commands = {"adiós", "terminar", "salir", "apagar", "adios"}
+        self.memory_commands = {"recuerda", "recuerdame", "historial", "contexto", "memoria"}
         
-        print("✅ Sistema listo.\n")
-
+        print("✅ Sistema listo con memoria persistente.\n")
+    
+    def init_memory_db(self):
+        """Inicializa la base de datos SQLite para memoria persistente"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Crear tablas si no existen
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id TEXT PRIMARY KEY,
+                user_id TEXT,
+                start_time TIMESTAMP,
+                end_time TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                turn INTEGER,
+                user_text TEXT,
+                assistant_text TEXT,
+                timestamp TIMESTAMP,
+                FOREIGN KEY (session_id) REFERENCES sessions (session_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS preferences (
+                user_id TEXT,
+                key TEXT,
+                value TEXT,
+                timestamp TIMESTAMP,
+                PRIMARY KEY (user_id, key)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                metric_name TEXT,
+                value REAL,
+                timestamp TIMESTAMP
+            )
+        ''')
+        
+        # Crear índices para mejor rendimiento
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_conversations_timestamp ON conversations(timestamp)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_preferences_user ON preferences(user_id)')
+        
+        conn.commit()
+        conn.close()
+    
     def apply_voice_filter(self, audio_data, fs):
         """
         🎧 Aplica un filtro pasa-banda matemático para reducir ruido de fondo.
@@ -358,6 +420,10 @@ class ColdTemplarAssistant:
         if contains_keyword(["envia un correo", "manda un email", "crea una tarea", "nuevo evento", "tuitea", "publica", "notion", "calendario"]):
             return "automation"
 
+        # === COMANDOS DE MEMORIA ===
+        if contains_keyword(["recuerda", "recuerdame", "historial", "contexto", "memoria", "lo que hablamos", "nuestra conversacion"]):
+            return "memory"
+
         return None
     
     def show_help(self):
@@ -370,6 +436,9 @@ class ColdTemplarAssistant:
             "• Abrir aplicaciones (di 'abre navegador' o 'abre aplicación').\n"
             "• Reproducir música (di 'poner música' o 'spotify').\n"
             "• Ejecutar tareas digitales como enviar correos o crear tareas (vía n8n).\n"
+            "• Recordar conversaciones anteriores (di 'recuerda lo que hablamos').\n"
+            "• Consultar nuestro historial (di 'historial').\n"
+            "• Obtener contexto de conversaciones recientes (di 'contexto').\n"
             "¿En qué puedo ayudarte?"
         )
         return help_text
@@ -403,6 +472,83 @@ class ColdTemplarAssistant:
         except Exception as e:
             print(f"⚠️  No se pudo guardar el log: {e}")
     
+    def save_to_memory(self, session_id: str, turn: int, user_text: str, assistant_text: str):
+        """Guarda la conversación en la base de datos de memoria"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO conversations (session_id, turn, user_text, assistant_text, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (session_id, turn, user_text, assistant_text, datetime.now()))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_conversation_history(self, session_id: str) -> List[Dict[str, Any]]:
+        """Obtiene el historial completo de una sesión"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT turn, user_text, assistant_text, timestamp
+            FROM conversations
+            WHERE session_id = ?
+            ORDER BY turn ASC
+        ''', (session_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [{
+            'turn': row[0],
+            'user_text': row[1],
+            'assistant_text': row[2],
+            'timestamp': row[3]
+        } for row in rows]
+    
+    def search_conversations(self, query: str) -> List[Dict[str, Any]]:
+        """Busca conversaciones que contengan el texto especificado"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Búsqueda en user_text y assistant_text
+        cursor.execute('''
+            SELECT session_id, turn, user_text, assistant_text, timestamp
+            FROM conversations
+            WHERE user_text LIKE ? OR assistant_text LIKE ?
+            ORDER BY timestamp DESC
+            LIMIT 10
+        ''', (f'%{query}%', f'%{query}%'))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [{
+            'session_id': row[0],
+            'turn': row[1],
+            'user_text': row[2],
+            'assistant_text': row[3],
+            'timestamp': row[4]
+        } for row in rows]
+    
+    def get_context(self, session_id: str, num_turns: int = 3) -> str:
+        """Obtiene el contexto reciente de una conversación"""
+        history = self.get_conversation_history(session_id)
+        
+        if not history:
+            return "No tengo contexto de conversaciones anteriores."
+        
+        # Tomar los últimos 'num_turns' turnos
+        recent_turns = history[-num_turns:]
+        
+        context = "En nuestra última conversación, dijiste:\n"
+        for turn in recent_turns:
+            context += f"• Tú: {turn['user_text']}\n"
+            context += f"  Yo: {turn['assistant_text']}\n\n"
+        
+        return context.strip()
+    
     def run_interactive(self):
         """
         🔄 Bucle principal de conversación interactiva (El "Main Loop").
@@ -415,13 +561,14 @@ class ColdTemplarAssistant:
             1. Escucha -> 2. Transcribe -> 3. Enruta/Piensa -> 4. Habla -> 5. Guarda Log -> (Repite)
         """
         print("\n" + "="*60)
-        print("🟢 COLDTEMPLAR ASISTENTE - Modo Interactivo")
+        print("🟢 COLDTEMPLAR ASISTENTE - Modo Interactivo con Memoria Persistente")
         print("="*60)
         print("Commands: 'adiós' para salir, 'reporte' para estado del sistema")
+        print("Nuevos comandos: 'recuerda lo que hablamos', 'historial', 'contexto'")
         print("="*60 + "\n")
         
         # Introducción
-        self.speak("Sistema en línea, Rober. Estoy escuchando.")
+        self.speak("Sistema en línea, Rober. Estoy escuchando y recordando nuestras conversaciones.")
         
         try:
             turn = 1
@@ -475,7 +622,7 @@ class ColdTemplarAssistant:
                     print(f"🤖 [IA]: {respuesta}")
                     self.speak(respuesta)
                     
-                    # Enviar a webhook de n8n (Asegúrate de que n8n esté corriendo en este puerto)
+                    # Enviar a webhook de n8n
                     try:
                         webhook_url = "http://localhost:5678/webhook/coldtemplar-tasks"
                         payload = {
@@ -487,10 +634,33 @@ class ColdTemplarAssistant:
                     except Exception as e:
                         print(f"⚠️ No se pudo conectar con n8n. ¿Está encendido? Error: {e}")
                 
-                elif comando == "control":
-                    respuesta = self.think(texto_usuario)
-                    print(f"🤖 [IA]: {respuesta}")
-                    self.speak(respuesta)
+                elif comando == "memory":
+                    # Manejar comandos de memoria
+                    if "recuerda" in texto_usuario or "recuerdame" in texto_usuario:
+                        context = self.get_context(self.session_id)
+                        respuesta = context
+                        print(f"🧠 [Memoria]: {respuesta}")
+                        self.speak(respuesta)
+                    
+                    elif "historial" in texto_usuario:
+                        historia = self.get_conversation_history(self.session_id)
+                        if historia:
+                            respuesta = f"Tenemos {len(historia)} turnos en esta sesión. ¿Quieres que te recuerde algo específico?"
+                        else:
+                            respuesta = "No tenemos historial en esta sesión aún."
+                        print(f"📚 [Historial]: {respuesta}")
+                        self.speak(respuesta)
+                    
+                    elif "contexto" in texto_usuario:
+                        context = self.get_context(self.session_id, num_turns=5)
+                        respuesta = context
+                        print(f"🔄 [Contexto]: {respuesta}")
+                        self.speak(respuesta)
+                    
+                    else:
+                        respuesta = "Puedes preguntarme 'recuerda lo que hablamos', 'historial' o 'contexto'"
+                        print(f"❓ [Ayuda Memoria]: {respuesta}")
+                        self.speak(respuesta)
                 
                 else:
                     # 4. PENSAR (LLM)
@@ -500,13 +670,17 @@ class ColdTemplarAssistant:
                     # 5. HABLAR (TTS)
                     self.speak(respuesta)
                 
-                # 6. REGISTRAR EN LOG
+                # 6. REGISTRAR EN LOG Y MEMORIA
                 self.session_log.append({
                     'turno': turn,
                     'usuario': texto_usuario,
                     'respuesta': respuesta if comando != "exit" else "SESIÓN TERMINADA",
                     'timestamp': datetime.now().isoformat()
                 })
+                
+                # Guardar en memoria persistente
+                if comando != "exit":
+                    self.save_to_memory(self.session_id, turn, texto_usuario, respuesta)
                 
                 turn += 1
                 
