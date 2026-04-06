@@ -12,7 +12,8 @@
 ### 2. 👩 Voz Femenina
 - ✅ Configurado modelo Piper femenino en español (`es_ES-gama-female.onnx`)
 - ✅ Fallback a voz media si no existe el archivo
-- ✅ Parámetros optimizados (length_scale 0.78, sentence_silence 0.05)
+- ✅ Motor TTS simplificado: sintetiza texto literal y ya no delega razonamiento al script de voz
+- ✅ Parámetros actualizados (length_scale 0.9, sentence_silence 0.08)
 
 ### 3. 🧠 Mejor Reconocimiento de Intenciones
 **Nueva detección de comandos:**
@@ -40,6 +41,10 @@ Sistema prompt mejorado:
 
 ### 6. 🎯 Mejor Manejo de Errores
 - Detección mejorada de dispositivo de audio (fallback automático)
+- Calibración automática de ruido ambiente antes de escuchar
+- Búfer previo de audio para no cortar la primera sílaba
+- Normalización y compresión suave de la señal antes de Whisper
+- Archivo WAV crudo para diagnóstico local (`/tmp/orden_coldtemplar_raw.wav`)
 - Mensajes de error más claros
 - Validación de rutas de scripts
 - Logging detallado de cada sesión
@@ -55,6 +60,21 @@ Sistema prompt mejorado:
 ## 🔧 Detalles Técnicos de Cambios
 
 ### Archivo: `coldtemplar_asistente.py`
+
+**Mejoras de escucha y transcripción:**
+```python
+self.whisper_model_name = os.environ.get("COLDTEMPLAR_WHISPER_MODEL", "base")
+self.model = WhisperModel(self.whisper_model_name, device="cpu", compute_type="int8")
+
+self.calibrate_noise_floor(...)
+recording = self.apply_voice_filter(recording, self.fs_whisper)
+```
+
+**Qué cambió:**
+- Whisper ahora usa `base` por defecto para mejorar precisión
+- El VAD ajusta sus umbrales según el ruido ambiente real
+- Se conserva audio previo a la detección de voz para no truncar el inicio
+- La señal se limpia y normaliza antes de transcribir
 
 **Función `think()` - Prompts Mejorados:**
 ```python
@@ -94,18 +114,22 @@ normalize_text() + closest_command() para fuzzy matching
 
 ### Archivo: `habla_coldtemplar.sh`
 
-**Voz Femenina:**
+**Motor TTS literal:**
 ```bash
-VOZ="$HOME/ia-tools/es_ES-gama-female.onnx"  # Femenina
-# Fallback si no existe:
-VOZ="$HOME/ia-tools/es_ES-gama-medium.onnx"  # Media/neutra
+TEXT="${1:-}"
+printf '%s\n' "$TEXT" | "$PIPER" ...
 ```
 
 **Parámetros de síntesis:**
 ```bash
---length_scale 0.78  # Velocidad controlada
---sentence_silence 0.05  # Pausas naturales
+--length_scale 0.9
+--sentence_silence 0.08
 ```
+
+**Qué cambió:**
+- El script de voz ya no ejecuta comandos ni consulta Ollama
+- La síntesis ahora recibe directamente la respuesta generada por Python
+- El flujo queda más consistente: `escucha -> transcribe -> piensa -> sintetiza`
 
 ---
 
@@ -173,6 +197,8 @@ ColdTemplar: "Hasta pronto, Rober. Modo de reposo activado. [VOZA FEMENINA]"
 ✅ Sintaxis Shell: OK
 ✅ Dependencias cargadas: OK
 ✅ Dispositivo de audio: Detección automática
+✅ Calibración de ruido ambiente: Integrada
+✅ Whisper por defecto: base
 ✅ Voz femenina: Configurada
 ✅ Prompts en español: Validados
 ✅ Manejo de comandos: Probado
@@ -257,4 +283,3 @@ Tu asistente ahora es:
 ✅ Robusto y con manejo de errores
 
 **Ejecuta ahora:** `ct`
-

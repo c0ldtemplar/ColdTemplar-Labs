@@ -61,6 +61,9 @@ backups/
 .sixth/
 .codex
 n8n_data/  # Volumen persistente local de n8n (Contiene credenciales y flujos)
+coldtemplar_memory.db
+*.sqlite
+*.sqlite3
 
 # Keep logs structure but ignore session data
 logs/.gitkeep

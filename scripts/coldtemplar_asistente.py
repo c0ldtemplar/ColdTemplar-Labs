@@ -8,6 +8,7 @@ Con sistema de memoria persistente mejorado
 import sounddevice as sd
 from scipy.io.wavfile import write
 from scipy import signal
+from collections import deque
 import numpy as np
 import subprocess
 import os
@@ -18,6 +19,7 @@ import requests
 import difflib
 import queue
 import sqlite3
+import time
 from faster_whisper import WhisperModel
 from datetime import datetime
 from pathlib import Path
@@ -39,12 +41,20 @@ class ColdTemplarAssistant:
     
     def __init__(self):
         # Configuración de audio
-        # Nota: ALC256 solo soporta 44100 Hz o 48000 Hz
-        self.fs_capture = 44100  # Tasa de captura (lo que soporta el hw)
+        # Nota: muchos códecs internos reportan mejor su frecuencia real que una fija.
+        self.fs_capture = 44100
         self.fs_whisper = 16000  # Tasa que necesita Whisper
         self.listen_seconds = 5
         self.audio_file = "/tmp/orden_coldtemplar.wav"
+        self.raw_audio_file = "/tmp/orden_coldtemplar_raw.wav"
         self.preferred_input_name = "ALC256"  # Preferencia de micrófono
+        self.vad_rms_threshold = 0.0035
+        self.min_peak_threshold = 0.004
+        self.noise_calibration_seconds = 0.8
+        self.initial_silence_seconds = 6
+        self.silence_limit_seconds = 2.2
+        self.max_record_seconds = 20
+        self.pre_speech_buffer_seconds = 0.35
 
         # Determinar dispositivo de entrada
         self.device_id = None
@@ -68,14 +78,24 @@ class ColdTemplarAssistant:
 
                 print(f"⚠️  No se encontró '{self.preferred_input_name}'. Usando default device id={self.device_id}")
 
-            print(f"ℹ️  Micrófono seleccionado ID={self.device_id} ({sd.query_devices(self.device_id)['name']})")
+            selected_device = sd.query_devices(self.device_id)
+            default_samplerate = int(selected_device["default_samplerate"])
+            if default_samplerate > 0:
+                self.fs_capture = default_samplerate
+
+            print(
+                f"ℹ️  Micrófono seleccionado ID={self.device_id} "
+                f"({selected_device['name']}) @ {self.fs_capture}Hz"
+            )
         except Exception as e:
             print(f"⚠️  No se pudo resolver el dispositivo de entrada: {e}")
             self.device_id = 2
 
         # Modelos IA
         print("⚙️  Cargando motores de IA local...")
-        self.model = WhisperModel("tiny", device="cpu", compute_type="int8")
+        self.whisper_model_name = os.environ.get("COLDTEMPLAR_WHISPER_MODEL", "base")
+        self.model = WhisperModel(self.whisper_model_name, device="cpu", compute_type="int8")
+        print(f"🧠 Whisper cargado con modelo '{self.whisper_model_name}'")
         
         # Sistema de memoria persistente
         self.db_path = Path.home() / "ColdTemplar-Labs" / "coldtemplar_memory.db"
@@ -149,13 +169,63 @@ class ColdTemplarAssistant:
     
     def apply_voice_filter(self, audio_data, fs):
         """
-        🎧 Aplica un filtro pasa-banda matemático para reducir ruido de fondo.
-        Elimina zumbidos graves (<80Hz) y siseos agudos (>7000Hz).
-        Mantiene la latencia ultrabaja (ms) usando matemáticas puras (SciPy).
+        🎧 Limpia y normaliza la señal antes de pasarla a Whisper.
+        Evita recortar demasiado la voz: usa un filtro suave y luego normaliza amplitud.
         """
-        # Filtro Butterworth de orden 4 (rango de voz principal)
-        b, a = signal.butter(4, [80, 7000], btype='bandpass', fs=fs)
-        return signal.filtfilt(b, a, audio_data, axis=0)
+        audio = np.asarray(audio_data, dtype=np.float32).reshape(-1)
+        if audio.size == 0:
+            return audio
+
+        # Eliminar offset DC para estabilizar la energía de la voz.
+        audio = audio - float(np.mean(audio))
+
+        # Filtro suave: quitar graves extremos sin comerse consonantes.
+        if audio.size > 64:
+            b, a = signal.butter(2, 70, btype='highpass', fs=fs)
+            audio = signal.filtfilt(b, a, audio)
+            b, a = signal.butter(2, 7600, btype='lowpass', fs=fs)
+            audio = signal.filtfilt(b, a, audio)
+
+        # Compresión suave para levantar voz baja sin saturar.
+        audio = np.tanh(audio * 1.8)
+
+        peak = float(np.max(np.abs(audio)))
+        if peak > 1e-6:
+            target_peak = 0.85
+            audio = np.clip(audio * (target_peak / peak), -1.0, 1.0)
+
+        return audio.astype(np.float32)
+
+    def calibrate_noise_floor(self, device_to_use):
+        """
+        Mide ruido ambiente antes de escuchar para adaptar umbrales del VAD.
+        Esto ayuda cuando el micrófono está lejos o el entorno tiene ventiladores.
+        """
+        calibration_frames = max(1, int(self.noise_calibration_seconds * self.fs_capture))
+        try:
+            sample = sd.rec(
+                calibration_frames,
+                samplerate=self.fs_capture,
+                channels=1,
+                dtype="float32",
+                device=device_to_use,
+            )
+            sd.wait()
+            mono = np.asarray(sample, dtype=np.float32).reshape(-1)
+            if mono.size == 0:
+                return
+
+            noise_rms = float(np.sqrt(np.mean(np.square(mono))))
+            noise_peak = float(np.max(np.abs(mono)))
+            self.vad_rms_threshold = max(0.0025, noise_rms * 2.4)
+            self.min_peak_threshold = max(0.0030, noise_peak * 2.1)
+            print(
+                "🎚️  Calibración ambiente: "
+                f"ruido_rms={noise_rms:.6f} ruido_peak={noise_peak:.6f} "
+                f"-> umbral_rms={self.vad_rms_threshold:.6f} umbral_peak={self.min_peak_threshold:.6f}"
+            )
+        except Exception as e:
+            print(f"⚠️  No se pudo calibrar ruido ambiente: {e}")
     
     def _record_with_vad(self, device_to_use):
         """Graba audio usando un stream continuo hasta detectar silencio (VAD)."""
@@ -166,33 +236,58 @@ class ColdTemplarAssistant:
 
         recording_chunks = []
         silence_frames = 0
-        max_frames = int(15 * self.fs_capture) # Máximo absoluto de seguridad: 15 seg
-        silence_limit_frames = int(1.5 * self.fs_capture) # Cortar tras 1.5 seg de silencio
+        max_frames = int(self.max_record_seconds * self.fs_capture)
+        silence_limit_frames = int(self.silence_limit_seconds * self.fs_capture)
         total_frames = 0
         has_spoken = False
+        pre_speech_chunks = deque()
+        pre_speech_frames = 0
+        target_pre_speech_frames = int(self.pre_speech_buffer_seconds * self.fs_capture)
         
-        with sd.InputStream(samplerate=self.fs_capture, channels=1, device=device_to_use, callback=audio_callback):
+        with sd.InputStream(
+            samplerate=self.fs_capture,
+            channels=1,
+            dtype="float32",
+            blocksize=2048,
+            device=device_to_use,
+            callback=audio_callback,
+        ):
             while total_frames < max_frames:
                 chunk = q.get()
                 recording_chunks.append(chunk)
                 total_frames += len(chunk)
                 
-                peak = np.max(np.abs(chunk))
-                # Umbral de energía para considerar que hay voz humana
-                if peak < 0.015:
+                mono_chunk = np.asarray(chunk, dtype=np.float32).reshape(-1)
+                peak = float(np.max(np.abs(mono_chunk)))
+                rms = float(np.sqrt(np.mean(np.square(mono_chunk))))
+                pre_speech_chunks.append(chunk)
+                pre_speech_frames += len(chunk)
+                while pre_speech_frames > target_pre_speech_frames and pre_speech_chunks:
+                    removed = pre_speech_chunks.popleft()
+                    pre_speech_frames -= len(removed)
+
+                # Combinar RMS y pico evita perder voz suave o sílabas cortas.
+                if rms < self.vad_rms_threshold and peak < self.min_peak_threshold:
                     silence_frames += len(chunk)
                 else:
+                    if not has_spoken and pre_speech_chunks:
+                        recording_chunks = list(pre_speech_chunks) + recording_chunks
+                        pre_speech_chunks.clear()
+                        pre_speech_frames = 0
                     silence_frames = 0
                     has_spoken = True
                     
                 # Si el usuario ya habló y hace una pausa larga, cortar el stream
                 if has_spoken and silence_frames >= silence_limit_frames:
                     break
-                # Si pasan 5 segundos de silencio total al inicio, cancelar
-                if not has_spoken and total_frames >= int(5 * self.fs_capture):
+                # Si pasan varios segundos de silencio total al inicio, cancelar.
+                if not has_spoken and total_frames >= int(self.initial_silence_seconds * self.fs_capture):
                     break
 
-        return np.concatenate(recording_chunks, axis=0)
+        if not recording_chunks:
+            return np.zeros(0, dtype=np.float32)
+
+        return np.concatenate(recording_chunks, axis=0).reshape(-1)
 
     def listen(self):
         """
@@ -208,6 +303,7 @@ class ColdTemplarAssistant:
         """
         print("🎤 Escuchando... (Habla ahora, me detendré al hacer una pausa)")
         try:
+            self.calibrate_noise_floor(self.device_id)
             print(f"🎧 Usando dispositivo id={self.device_id} tasa={self.fs_capture}Hz")
             recording = self._record_with_vad(self.device_id)
 
@@ -215,27 +311,40 @@ class ColdTemplarAssistant:
             print(f"❌ Error al grabar en dispositivo primario: {e}")
             try:
                 print("🔁 Reintentando con dispositivo por defecto")
+                self.calibrate_noise_floor('default')
                 recording = self._record_with_vad('default')
             except Exception as e2:
                 print(f"❌ Error alternativo: {e2}")
                 return False
-                
-        peak = float(np.max(np.abs(recording)))
-        print(f"📈 Pico de señal final: {peak:.6f}")
-        if peak < 0.01:
+
+        if recording.size == 0:
+            print("⚠️  No se grabó audio útil.")
+            return False
+
+        raw_peak = float(np.max(np.abs(recording)))
+        raw_rms = float(np.sqrt(np.mean(np.square(recording))))
+        print(f"📈 Señal cruda: peak={raw_peak:.6f} rms={raw_rms:.6f}")
+        if raw_peak < self.min_peak_threshold:
             print("⚠️  Atención: no se detectó voz clara. Señal muy baja.")
             return False
+
+        write(self.raw_audio_file, self.fs_capture, (np.clip(recording, -1.0, 1.0) * 32767).astype(np.int16))
             
         # Resamplear a 16000 Hz para Whisper
         if self.fs_capture != self.fs_whisper:
             num_samples = int(len(recording) * self.fs_whisper / self.fs_capture)
             recording = signal.resample(recording, num_samples)
 
-        # Aplicar filtro de reducción de ruido ultrarrápido
+        # Limpiar y normalizar antes de transcribir
         recording = self.apply_voice_filter(recording, self.fs_whisper)
 
         write(self.audio_file, self.fs_whisper, (recording * 32767).astype(np.int16))
-        print(f"💾 WAV creado ({self.fs_whisper}Hz) - Duración de captura: {len(recording)/self.fs_whisper:.1f}s")
+        processed_peak = float(np.max(np.abs(recording)))
+        processed_rms = float(np.sqrt(np.mean(np.square(recording))))
+        print(
+            f"💾 WAV creado ({self.fs_whisper}Hz) - Duración: {len(recording)/self.fs_whisper:.1f}s "
+            f"peak={processed_peak:.6f} rms={processed_rms:.6f}"
+        )
         return True
     
     def transcribe(self):
@@ -251,9 +360,21 @@ class ColdTemplarAssistant:
         """
         try:
             print("🧠 Transcribiendo...")
-            segments, _ = self.model.transcribe(self.audio_file, 
-                                                beam_size=5, language="es")
+            segments, info = self.model.transcribe(
+                self.audio_file,
+                beam_size=8,
+                best_of=3,
+                language="es",
+                vad_filter=True,
+                condition_on_previous_text=False,
+                temperature=0,
+                no_speech_threshold=0.45,
+                compression_ratio_threshold=2.2,
+                log_prob_threshold=-0.8,
+                initial_prompt="Transcribe con precisión en español latino, respetando palabras comunes y nombres propios."
+            )
             text = " ".join([seg.text for seg in segments]).strip()
+            print(f"📝 Whisper detectó idioma={info.language} prob={info.language_probability:.2f}")
             
             # 🛡️ Filtro de Alucinaciones (Defensive Normalization)
             # Whisper a veces inventa sílabas sueltas o puntuación con el ruido blanco
@@ -344,10 +465,10 @@ class ColdTemplarAssistant:
                 return
 
             subprocess.run(
-                f'bash "{tts_script}" "{text_clean}"',
-                shell=True,
+                ["bash", tts_script, text_clean],
                 timeout=60
             )
+            time.sleep(0.35)
         except Exception as e:
             print(f"⚠️  Error en reproducción: {e}")
     
@@ -395,16 +516,28 @@ class ColdTemplarAssistant:
                             return True
             return False
 
+        def has_exact_phrase(phrases):
+            return any(phrase in text_norm for phrase in phrases)
+
+        def has_word(words_to_match):
+            return any(word in words for word in words_to_match)
+
         # === COMANDOS DE TERMINAR SESIÓN ===
-        if contains_keyword(["adios", "hasta luego", "terminar", "salir", "apagar", "desconectar", "nos vemos", "bye"]):
+        if has_exact_phrase(["adios", "hasta luego", "nos vemos"]) or (
+            len(words) <= 3 and has_word({"terminar", "salir", "apagar", "desconectar", "bye"})
+        ):
             return "exit"
 
         # === COMANDOS DE AYUDA ===
-        if contains_keyword(["ayuda", "help", "que puedes hacer", "tus funciones", "como funciono", "cual es tu funcion", "instrucciones"]):
+        if has_exact_phrase(["que puedes hacer", "cual es tu funcion", "tus funciones"]) or (
+            len(words) <= 4 and has_word({"ayuda", "help", "instrucciones"})
+        ):
             return "help"
 
         # === COMANDOS DE ESTADO/REPORTE ===
-        if contains_keyword(["reporte", "estado", "como estoy", "diagnostico", "salud", "status", "como esta"]):
+        if has_exact_phrase(["estado del sistema", "reporte del sistema", "diagnostico del sistema"]) or (
+            len(words) <= 4 and has_word({"reporte", "diagnostico", "status"})
+        ):
             return "report"
 
         # === COMANDOS DE CONTROL DE SISTEMA ===
@@ -447,16 +580,8 @@ class ColdTemplarAssistant:
     def get_system_report(self):
         """Obtiene reporte del sistema"""
         try:
-            # Ejecutar auditoría ligera
-            result = subprocess.run(
-                "bash ~/ia-tools/auditar_voz.sh --text-only 2>/dev/null || echo 'Sistema online'",
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            return result.stdout.strip() or "Sistema en línea y estable."
-        except:
+            return "Sistema en línea y estable."
+        except Exception:
             return "No pude acceder al reporte del sistema."
     
     def save_session(self):

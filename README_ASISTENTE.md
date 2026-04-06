@@ -49,20 +49,22 @@ python3 ~/ColdTemplar-Labs/scripts/coldtemplar_asistente.py
 
 ```
 ⚙️  Cargando motores de IA local...
-✅ Sistema listo.
+🧠 Whisper cargado con modelo 'base'
+✅ Sistema listo con memoria persistente.
 
 ============================================================
-🟢 COLDTEMPLAR ASISTENTE - Modo Interactivo
+🟢 COLDTEMPLAR ASISTENTE - Modo Interactivo con Memoria Persistente
 ============================================================
 
-🎤 Escuchando (5 seg)...
+🎤 Escuchando... (Habla ahora, me detendré al hacer una pausa)
+🎚️  Calibración ambiente: ruido_rms=0.00xxxx ruido_peak=0.00xxxx
 💬 [Tú]: ¿Cuál es la capital de Francia?
 🤔 Pensando...
 🤖 [IA]: La capital de Francia es París.
 [Se reproduce la respuesta por voz]
 
 --- TURNO 2 ---
-🎤 Escuchando (5 seg)...
+🎤 Escuchando... (Habla ahora, me detendré al hacer una pausa)
 ...
 ```
 
@@ -73,6 +75,11 @@ python3 ~/ColdTemplar-Labs/scripts/coldtemplar_asistente.py
 Cada sesión se guarda automáticamente en:
 ```
 ~/ColdTemplar-Labs/logs/sesion_YYYYMMDD_HHMMSS.json
+```
+
+La memoria conversacional persistente se guarda localmente en:
+```
+~/ColdTemplar-Labs/coldtemplar_memory.db
 ```
 
 **Contenido del log:**
@@ -95,14 +102,19 @@ Para instalar las dependencias Python:
 pip install sounddevice scipy faster-whisper requests
 ```
 
+El modelo Whisper por defecto ahora es `base` para mejorar precisión. Si necesitas priorizar velocidad en equipos más justos, puedes ejecutar:
+```bash
+COLDTEMPLAR_WHISPER_MODEL=tiny python3 ~/ColdTemplar-Labs/scripts/coldtemplar_asistente.py
+```
+
 ---
 
 ## 🐛 Troubleshooting
 
 ### "No se escucha el audio"
 ```bash
-# Verifica que Piper esté en el PATH
-which piper
+# Verifica que exista Piper en la ruta usada por el script
+ls -l ~/ia-tools/piper/piper
 ```
 
 ### "Ollama no responde"
@@ -116,6 +128,8 @@ ollama serve &
 # Lista dispositivos de audio
 python3 -c "import sounddevice as sd; print(sd.query_devices())"
 ```
+
+Si escucha muy bajo o corta el inicio de las frases, revisa la salida de calibración ambiente al arrancar. El sistema ahora ajusta automáticamente los umbrales de voz y conserva un pequeño búfer previo para no perder la primera sílaba.
 
 ---
 
