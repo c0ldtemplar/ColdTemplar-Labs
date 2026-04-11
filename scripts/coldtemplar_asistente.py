@@ -115,57 +115,54 @@ class ColdTemplarAssistant:
     
     def init_memory_db(self):
         """Inicializa la base de datos SQLite para memoria persistente"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Crear tablas si no existen
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS sessions (
-                session_id TEXT PRIMARY KEY,
-                user_id TEXT,
-                start_time TIMESTAMP,
-                end_time TIMESTAMP
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS conversations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT,
-                turn INTEGER,
-                user_text TEXT,
-                assistant_text TEXT,
-                timestamp TIMESTAMP,
-                FOREIGN KEY (session_id) REFERENCES sessions (session_id)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS preferences (
-                user_id TEXT,
-                key TEXT,
-                value TEXT,
-                timestamp TIMESTAMP,
-                PRIMARY KEY (user_id, key)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS metrics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                metric_name TEXT,
-                value REAL,
-                timestamp TIMESTAMP
-            )
-        ''')
-        
-        # Crear índices para mejor rendimiento
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_conversations_timestamp ON conversations(timestamp)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_preferences_user ON preferences(user_id)')
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Crear tablas si no existen
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS sessions (
+                    session_id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    start_time TIMESTAMP,
+                    end_time TIMESTAMP
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT,
+                    turn INTEGER,
+                    user_text TEXT,
+                    assistant_text TEXT,
+                    timestamp TIMESTAMP,
+                    FOREIGN KEY (session_id) REFERENCES sessions (session_id)
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS preferences (
+                    user_id TEXT,
+                    key TEXT,
+                    value TEXT,
+                    timestamp TIMESTAMP,
+                    PRIMARY KEY (user_id, key)
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    metric_name TEXT,
+                    value REAL,
+                    timestamp TIMESTAMP
+                )
+            ''')
+            
+            # Crear índices para mejor rendimiento
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_conversations_timestamp ON conversations(timestamp)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_preferences_user ON preferences(user_id)')
     
     def apply_voice_filter(self, audio_data, fs):
         """
@@ -416,15 +413,16 @@ class ColdTemplarAssistant:
 
             entrada = f"{system_prompt}\n\nPregunta del usuario:\n{prompt}\n\nRespuesta en español (máximo 2 frases):" 
             
-            result = subprocess.run(
-                ['ollama', 'run', 'llama3', entrada],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                env={**os.environ, 'OLLAMA_MODELS': os.path.expanduser('~/.ollama/models')}
-            )
+            # Utilizar API REST local en lugar de subprocess ahorra CPU y latencia
+            payload = {
+                "model": "llama3",
+                "prompt": entrada,
+                "stream": False
+            }
+            req = requests.post("http://localhost:11434/api/generate", json=payload, timeout=30)
+            req.raise_for_status()
+            response = req.json().get("response", "").strip()
             
-            response = result.stdout.strip()
             if not response:
                 return "No he entendido bien tu petición. ¿Puedes reformularla en español, por favor?"
 
@@ -434,7 +432,7 @@ class ColdTemplarAssistant:
 
             return response
 
-        except subprocess.TimeoutExpired:
+        except requests.exceptions.Timeout:
             return "La respuesta tardó demasiado. Intenta una pregunta más simple."
         except Exception as e:
             print(f"⚠️  Error en razonamiento: {e}")
@@ -600,31 +598,24 @@ class ColdTemplarAssistant:
     
     def save_to_memory(self, session_id: str, turn: int, user_text: str, assistant_text: str):
         """Guarda la conversación en la base de datos de memoria"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO conversations (session_id, turn, user_text, assistant_text, timestamp)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (session_id, turn, user_text, assistant_text, datetime.now()))
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO conversations (session_id, turn, user_text, assistant_text, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (session_id, turn, user_text, assistant_text, datetime.now()))
     
     def get_conversation_history(self, session_id: str) -> List[Dict[str, Any]]:
         """Obtiene el historial completo de una sesión"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT turn, user_text, assistant_text, timestamp
-            FROM conversations
-            WHERE session_id = ?
-            ORDER BY turn ASC
-        ''', (session_id,))
-        
-        rows = cursor.fetchall()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT turn, user_text, assistant_text, timestamp
+                FROM conversations
+                WHERE session_id = ?
+                ORDER BY turn ASC
+            ''', (session_id,))
+            rows = cursor.fetchall()
         
         return [{
             'turn': row[0],
@@ -635,20 +626,17 @@ class ColdTemplarAssistant:
     
     def search_conversations(self, query: str) -> List[Dict[str, Any]]:
         """Busca conversaciones que contengan el texto especificado"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Búsqueda en user_text y assistant_text
-        cursor.execute('''
-            SELECT session_id, turn, user_text, assistant_text, timestamp
-            FROM conversations
-            WHERE user_text LIKE ? OR assistant_text LIKE ?
-            ORDER BY timestamp DESC
-            LIMIT 10
-        ''', (f'%{query}%', f'%{query}%'))
-        
-        rows = cursor.fetchall()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            # Búsqueda en user_text y assistant_text
+            cursor.execute('''
+                SELECT session_id, turn, user_text, assistant_text, timestamp
+                FROM conversations
+                WHERE user_text LIKE ? OR assistant_text LIKE ?
+                ORDER BY timestamp DESC
+                LIMIT 10
+            ''', (f'%{query}%', f'%{query}%'))
+            rows = cursor.fetchall()
         
         return [{
             'session_id': row[0],

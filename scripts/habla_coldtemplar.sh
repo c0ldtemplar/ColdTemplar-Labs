@@ -27,8 +27,14 @@ if [ ! -f "$VOICE" ]; then
     exit 1
 fi
 
-printf '%s\n' "$TEXT" | tee /dev/tty | "$PIPER" \
+SPEAKER_ARG=""
+if [[ "$VOICE" == *"female"* ]]; then
+    SPEAKER_ARG="--speaker 1"
+fi
+
+printf '%s\n' "$TEXT" | "$PIPER" \
   --model "$VOICE" \
+  $SPEAKER_ARG \
   --length_scale 0.9 \
   --sentence_silence 0.08 \
   --output_file "$AUDIO"
