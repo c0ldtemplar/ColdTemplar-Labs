@@ -24,6 +24,20 @@ from faster_whisper import WhisperModel
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any
+import io
+import base64
+
+try:
+    from PIL import ImageGrab
+    VISION_AVAILABLE = True
+except ImportError:
+    VISION_AVAILABLE = False
+
+try:
+    import chromadb
+    CHROMA_AVAILABLE = True
+except ImportError:
+    CHROMA_AVAILABLE = False
 
 class ColdTemplarAssistant:
     """
@@ -47,12 +61,12 @@ class ColdTemplarAssistant:
         self.listen_seconds = 5
         self.audio_file = "/tmp/orden_coldtemplar.wav"
         self.raw_audio_file = "/tmp/orden_coldtemplar_raw.wav"
-        self.preferred_input_name = "ALC256"  # Preferencia de micrófono
+        self.preferred_input_name = "pulse"  # Cambia "pulse" por la palabra clave de tu micrófono ideal
         self.vad_rms_threshold = 0.0035
         self.min_peak_threshold = 0.004
         self.noise_calibration_seconds = 0.8
         self.initial_silence_seconds = 6
-        self.silence_limit_seconds = 2.2
+        self.silence_limit_seconds = 1.2
         self.max_record_seconds = 20
         self.pre_speech_buffer_seconds = 0.35
 
@@ -101,6 +115,28 @@ class ColdTemplarAssistant:
         self.db_path = Path.home() / "ColdTemplar-Labs" / "coldtemplar_memory.db"
         self.init_memory_db()
         
+        # Módulo de Visión (Multimodal)
+        self.use_vision = False
+        if VISION_AVAILABLE:
+            self.use_vision = True
+            print("👁️ Módulo de Visión Multimodal activado.")
+        else:
+            print("⚠️ Librería 'Pillow' no instalada. La visión estará desactivada.")
+
+        # Memoria Semántica Vectorial (ChromaDB)
+        self.use_chroma = False
+        if CHROMA_AVAILABLE:
+            self.chroma_path = str(Path.home() / "ColdTemplar-Labs" / "chroma_db")
+            try:
+                self.chroma_client = chromadb.PersistentClient(path=self.chroma_path)
+                self.collection = self.chroma_client.get_or_create_collection(name="coldtemplar_memory")
+                self.use_chroma = True
+                print("🧠 Memoria Semántica Vectorial (ChromaDB) inicializada.")
+            except Exception as e:
+                print(f"⚠️ Error al inicializar ChromaDB: {e}")
+        else:
+            print("⚠️ Módulo 'chromadb' no instalado. La memoria semántica estará desactivada.")
+
         # Log de sesión
         self.session_log = []
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -267,18 +303,22 @@ class ColdTemplarAssistant:
                 if rms < self.vad_rms_threshold and peak < self.min_peak_threshold:
                     silence_frames += len(chunk)
                 else:
-                    if not has_spoken and pre_speech_chunks:
-                        recording_chunks = list(pre_speech_chunks) + recording_chunks
-                        pre_speech_chunks.clear()
-                        pre_speech_frames = 0
+                    if not has_spoken:
+                        print("🗣️  [Voz detectada, te escucho...]")
+                        if pre_speech_chunks:
+                            recording_chunks = list(pre_speech_chunks) + recording_chunks
+                            pre_speech_chunks.clear()
+                            pre_speech_frames = 0
                     silence_frames = 0
                     has_spoken = True
                     
                 # Si el usuario ya habló y hace una pausa larga, cortar el stream
                 if has_spoken and silence_frames >= silence_limit_frames:
+                    print("⏳ [Silencio detectado, procesando audio...]")
                     break
                 # Si pasan varios segundos de silencio total al inicio, cancelar.
                 if not has_spoken and total_frames >= int(self.initial_silence_seconds * self.fs_capture):
+                    print("⏲️  [Tiempo de espera agotado sin voz]")
                     break
 
         if not recording_chunks:
@@ -384,7 +424,7 @@ class ColdTemplarAssistant:
             print(f"❌ Error en transcripción: {e}")
             return ""
     
-    def think(self, prompt):
+    def think(self, prompt, context_turns=None):
         """
         🤖 Genera una respuesta inteligente utilizando Ollama (LLM Local).
         
@@ -411,11 +451,17 @@ class ColdTemplarAssistant:
                 "6. Sé práctica y orientada a resultados."
             )
 
-            entrada = f"{system_prompt}\n\nPregunta del usuario:\n{prompt}\n\nRespuesta en español (máximo 2 frases):" 
+            historial = ""
+            if context_turns:
+                historial = "\nHistorial reciente de la conversación:\n"
+                for turn in context_turns:
+                    historial += f"Usuario: {turn['user_text']}\nTú: {turn['assistant_text']}\n"
+
+            entrada = f"{system_prompt}\n{historial}\nPregunta actual del usuario:\n{prompt}\n\nRespuesta en español (máximo 2 frases):" 
             
             # Utilizar API REST local en lugar de subprocess ahorra CPU y latencia
             payload = {
-                "model": "llama3",
+                "model": "llama3.1",
                 "prompt": entrada,
                 "stream": False
             }
@@ -433,11 +479,38 @@ class ColdTemplarAssistant:
             return response
 
         except requests.exceptions.Timeout:
-            return "La respuesta tardó demasiado. Intenta una pregunta más simple."
+            error_msg = "Disculpa, mi cerebro local tardó demasiado en responder."
+            print(f"⚠️  Timeout: {error_msg}")
+            return error_msg
         except Exception as e:
+            error_msg = "Disculpa, he perdido conexión con mi núcleo de procesamiento local."
             print(f"⚠️  Error en razonamiento: {e}")
-            return "No pude conectar con el cerebro local. Intenta otra vez."
+            return error_msg
     
+    def generate_bash_command(self, prompt):
+        """
+        🖥️ Genera un comando Bash puro a partir de la petición usando Llama 3.1
+        """
+        try:
+            system_prompt = (
+                "Eres un administrador de sistemas Linux experto. "
+                "Traduce la petición del usuario a un ÚNICO comando de terminal bash válido. "
+                "REGLAS: Responde ÚNICAMENTE con el comando. NO uses markdown. NO des explicaciones. "
+                "Ejemplo: si te piden actualizar el sistema, responde 'sudo apt update -y'."
+            )
+            payload = {
+                "model": "llama3.1",
+                "prompt": f"{system_prompt}\nPetición del usuario: {prompt}\n\nComando puro:",
+                "stream": False
+            }
+            req = requests.post("http://localhost:11434/api/generate", json=payload, timeout=15)
+            req.raise_for_status()
+            response = req.json().get("response", "").strip()
+            return response.replace("```bash", "").replace("```", "").replace("`", "").strip()
+        except Exception as e:
+            print(f"⚠️ Error generando comando bash: {e}")
+            return ""
+
     def speak(self, text):
         """
         🔊 Reproduce la respuesta por voz (Text-to-Speech).
@@ -483,11 +556,11 @@ class ColdTemplarAssistant:
 
     def process_command(self, text):
         """
-        🔀 Procesa y enruta comandos especiales del usuario usando Fuzzy Matching.
+        🔀 Procesa y enruta comandos especiales del usuario usando Fast Matching.
         
         ¿Por qué?
         Evita enviar comandos de acción local al LLM, ahorrando tiempo y memoria. 
-        Detecta variaciones fonéticas o errores leves del STT (ej. "habre" vs "abre").
+        Optimizado para ejecutarse sin bloqueos pesados de difflib (SequenceMatcher removido).
         
         💡 Ejemplo de evaluación:
             self.process_command("envia un coreo") # Retorna "automation"
@@ -495,30 +568,24 @@ class ColdTemplarAssistant:
         """
         text_norm = self.normalize_text(text)
         words = text_norm.split()
+        words_set = set(words)
         
-        def contains_keyword(keywords, cutoff=0.8):
+        def contains_keyword(keywords, cutoff=0.85):
             for kw in keywords:
                 # Coincidencia exacta de substring (muy rápida)
                 if kw in text_norm:
                     return True
-                # Fuzzy matching para palabras individuales
-                if ' ' not in kw:
+                # Fuzzy matching ligero solo para palabras únicas mayores a 4 letras
+                if ' ' not in kw and len(kw) > 4:
                     if difflib.get_close_matches(kw, words, n=1, cutoff=cutoff):
                         return True
-                # Fuzzy matching para frases (ventana deslizante)
-                else:
-                    kw_len = len(kw.split())
-                    for i in range(len(words) - kw_len + 1):
-                        window = " ".join(words[i:i+kw_len])
-                        if difflib.SequenceMatcher(None, window, kw).ratio() >= cutoff:
-                            return True
             return False
 
         def has_exact_phrase(phrases):
             return any(phrase in text_norm for phrase in phrases)
 
         def has_word(words_to_match):
-            return any(word in words for word in words_to_match)
+            return bool(words_set.intersection(words_to_match))
 
         # === COMANDOS DE TERMINAR SESIÓN ===
         if has_exact_phrase(["adios", "hasta luego", "nos vemos"]) or (
@@ -539,7 +606,7 @@ class ColdTemplarAssistant:
             return "report"
 
         # === COMANDOS DE CONTROL DE SISTEMA ===
-        if contains_keyword(["enciende", "apaga", "abre", "cierra", "ejecuta", "inicia"]):
+        if contains_keyword(["enciende", "apaga", "abre", "cierra", "ejecuta", "inicia", "actualiza", "instala", "terminal", "comando"]):
             return "control"
 
         # === COMANDOS DE MULTIMEDIA ===
@@ -556,6 +623,10 @@ class ColdTemplarAssistant:
         if contains_keyword(["recuerda", "recuerdame", "historial", "contexto", "memoria", "lo que hablamos", "nuestra conversacion"]):
             return "memory"
 
+        # === COMANDOS DE VISIÓN ===
+        if contains_keyword(["pantalla", "mira esto", "que ves", "analiza mi", "captura"]):
+            return "vision"
+
         return None
     
     def show_help(self):
@@ -565,12 +636,14 @@ class ColdTemplarAssistant:
             "• Responder preguntas en español.\n"
             "• Darme instrucciones para tareas.\n"
             "• Consultar el estado del sistema (di 'reporte').\n"
+            "• Ejecutar comandos en la terminal (di 'ejecuta' o 'actualiza').\n"
             "• Abrir aplicaciones (di 'abre navegador' o 'abre aplicación').\n"
             "• Reproducir música (di 'poner música' o 'spotify').\n"
             "• Ejecutar tareas digitales como enviar correos o crear tareas (vía n8n).\n"
             "• Recordar conversaciones anteriores (di 'recuerda lo que hablamos').\n"
             "• Consultar nuestro historial (di 'historial').\n"
             "• Obtener contexto de conversaciones recientes (di 'contexto').\n"
+            "• Analizar tu pantalla (di 'analiza mi pantalla' o 'qué ves').\n"
             "¿En qué puedo ayudarte?"
         )
         return help_text
@@ -604,6 +677,19 @@ class ColdTemplarAssistant:
                 INSERT INTO conversations (session_id, turn, user_text, assistant_text, timestamp)
                 VALUES (?, ?, ?, ?, ?)
             ''', (session_id, turn, user_text, assistant_text, datetime.now()))
+            
+        # Guardar en base de datos vectorial (ChromaDB)
+        if getattr(self, 'use_chroma', False):
+            try:
+                doc_id = f"{session_id}_{turn}"
+                documento = f"Usuario: {user_text}\nColdTemplar: {assistant_text}"
+                self.collection.add(
+                    documents=[documento],
+                    metadatas=[{"session_id": session_id, "turn": turn, "timestamp": datetime.now().isoformat()}],
+                    ids=[doc_id]
+                )
+            except Exception as e:
+                print(f"⚠️ Error guardando vector en ChromaDB: {e}")
     
     def get_conversation_history(self, session_id: str) -> List[Dict[str, Any]]:
         """Obtiene el historial completo de una sesión"""
@@ -663,6 +749,60 @@ class ColdTemplarAssistant:
         
         return context.strip()
     
+    def semantic_search(self, query: str, n_results: int = 3) -> str:
+        """Busca en el historial de forma semántica usando embeddings"""
+        if not getattr(self, 'use_chroma', False):
+            return "Mi módulo de memoria semántica está desactivado. Necesito ChromaDB."
+        
+        try:
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=n_results
+            )
+            if not results['documents'] or not results['documents'][0]:
+                return "No tengo recuerdos relacionados con eso."
+            
+            context = "\n".join([f"• {doc}" for doc in results['documents'][0]])
+            return context
+        except Exception as e:
+            print(f"⚠️ Error en búsqueda semántica: {e}")
+            return "Hubo un error al buscar en mis recuerdos."
+
+    def analyze_screen(self, prompt: str) -> str:
+        """Toma una captura de pantalla y la analiza usando un modelo de visión (llava)"""
+        if not getattr(self, 'use_vision', False):
+            return "Mi módulo de visión está desactivado porque falta la librería Pillow."
+        
+        try:
+            screenshot = ImageGrab.grab()
+            buffered = io.BytesIO()
+            # Convertimos a RGB para evitar problemas con canales alfa (RGBA) si existen
+            if screenshot.mode != 'RGB':
+                screenshot = screenshot.convert('RGB')
+            screenshot.save(buffered, format="JPEG", quality=80)
+            img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            
+            system_prompt = (
+                "Eres ColdTemplar, un asistente experto. "
+                "Analiza la imagen adjunta (una captura de pantalla del usuario) "
+                "y responde a su petición de forma breve y en español latino."
+            )
+            
+            payload = {
+                "model": "llava",  # Modelo multimodal en Ollama
+                "prompt": f"{system_prompt}\nPetición: {prompt}",
+                "stream": False,
+                "images": [img_str]
+            }
+            req = requests.post("http://localhost:11434/api/generate", json=payload, timeout=60)
+            req.raise_for_status()
+            return req.json().get("response", "").strip()
+        except requests.exceptions.Timeout:
+            return "El análisis visual está tomando demasiado tiempo."
+        except Exception as e:
+            print(f"⚠️ Error en análisis visual: {e}")
+            return "Hubo un error al procesar la imagen de tu pantalla."
+
     def run_interactive(self):
         """
         🔄 Bucle principal de conversación interactiva (El "Main Loop").
@@ -719,17 +859,46 @@ class ColdTemplarAssistant:
                     print(f"📊 [Reporte]: {respuesta}")
                     self.speak(respuesta)
                 
+                elif comando == "control":
+                    respuesta = "Entendido, generando comando de sistema..."
+                    self.speak("Entendido, generando comando de sistema...")
+                    cmd = self.generate_bash_command(texto_usuario)
+                    if cmd:
+                        print(f"🖥️  [Sistema]: Ejecutando -> {cmd}")
+                        self.speak("Ejecutando la acción en la terminal.")
+                        try:
+                            # Ejecutamos el comando (timeout de 15s para no bloquear al asistente infinitamente)
+                            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
+                            if result.returncode == 0:
+                                respuesta = "Comando ejecutado con éxito."
+                                self.speak(respuesta)
+                                print(f"✅ Salida:\n{result.stdout.strip()[:300]}")
+                            else:
+                                respuesta = "Hubo un error al ejecutar el comando."
+                                self.speak(respuesta)
+                                print(f"❌ Error:\n{result.stderr.strip()[:300]}")
+                        except subprocess.TimeoutExpired:
+                            respuesta = "El comando tardó demasiado, pero sigue ejecutándose en segundo plano."
+                            self.speak(respuesta)
+                        except Exception as e:
+                            respuesta = "No pude ejecutar el comando."
+                            self.speak(respuesta)
+                            print(f"⚠️ Excepción: {e}")
+                    else:
+                        respuesta = "No logré traducir tu petición a un comando seguro."
+                        self.speak(respuesta)
+
                 elif comando == "open_browser":
                     respuesta = "Claro, abriendo tu navegador..."
                     print(f"🤖 [IA]: {respuesta}")
                     self.speak(respuesta)
-                    os.system("xdg-open https://www.google.com > /dev/null 2>&1 &")
+                    subprocess.Popen(["xdg-open", "https://www.google.com"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
                 elif comando == "play_music":
                     respuesta = "Perfecto, reproduciendo algo de música tranquila para ti."
                     print(f"🤖 [IA]: {respuesta}")
                     self.speak(respuesta)
-                    os.system("spotify &>/dev/null &")
+                    subprocess.Popen(["spotify"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
                 elif comando == "automation":
                     respuesta = "Delegando la tarea a tus automatizaciones..."
@@ -743,10 +912,25 @@ class ColdTemplarAssistant:
                             "comando": texto_usuario,
                             "timestamp": datetime.now().isoformat()
                         }
-                        requests.post(webhook_url, json=payload, timeout=5)
-                        print("✅ Comando de automatización enviado exitosamente a n8n.")
+                        n8n_secret = os.environ.get("COLDTEMPLAR_N8N_SECRET", "coldtemplar_default_secret")
+                        headers = {"Authorization": f"Bearer {n8n_secret}"}
+                        response = requests.post(webhook_url, json=payload, headers=headers, timeout=5)
+                        
+                        if response.status_code in (401, 403):
+                            error_msg = "Faltan credenciales de seguridad."
+                            print(f"⚠️ {error_msg} (HTTP {response.status_code})")
+                            self.speak(error_msg)
+                        else:
+                            response.raise_for_status()
+                            print("✅ Comando de automatización enviado exitosamente a n8n.")
+                    except requests.exceptions.ConnectionError:
+                        error_msg = "Disculpa, no me he podido conectar con el servidor de automatización."
+                        print(f"⚠️ {error_msg}")
+                        self.speak(error_msg)
                     except Exception as e:
-                        print(f"⚠️ No se pudo conectar con n8n. ¿Está encendido? Error: {e}")
+                        error_msg = "Disculpa, hubo un fallo en mis herramientas de automatización."
+                        print(f"⚠️ {error_msg}: {e}")
+                        self.speak(error_msg)
                 
                 elif comando == "memory":
                     # Manejar comandos de memoria
@@ -776,9 +960,16 @@ class ColdTemplarAssistant:
                         print(f"❓ [Ayuda Memoria]: {respuesta}")
                         self.speak(respuesta)
                 
+                elif comando == "vision":
+                    self.speak("Analizando tu pantalla. Dame un momento...")
+                    respuesta = self.analyze_screen(texto_usuario)
+                    print(f"👁️ [Visión]: {respuesta}")
+                    self.speak(respuesta)
+
                 else:
                     # 4. PENSAR (LLM)
-                    respuesta = self.think(texto_usuario)
+                    context_turns = self.get_conversation_history(self.session_id)[-3:]
+                    respuesta = self.think(texto_usuario, context_turns)
                     print(f"🤖 [IA]: {respuesta}")
                     
                     # 5. HABLAR (TTS)

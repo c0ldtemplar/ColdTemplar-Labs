@@ -36,7 +36,7 @@
     },
     {
       "parameters": {
-        "model": "llama3",
+        "model": "llama3.1",
         "options": {
           "baseUrl": "http://host.docker.internal:11434"
         }
@@ -73,6 +73,32 @@
       "typeVersion": 1,
       "position": [
         720,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Usa esta herramienta para consultar tu agenda, leer los próximos eventos del día o crear reuniones en Google Calendar."
+      },
+      "id": "calendar-tool-1",
+      "name": "Google Calendar Tool",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1,
+      "position": [
+        900,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "language": "es"
+      },
+      "id": "wikipedia-tool-1",
+      "name": "Wikipedia",
+      "type": "@n8n/n8n-nodes-langchain.toolWikipedia",
+      "typeVersion": 1,
+      "position": [
+        1080,
         480
       ]
     }
@@ -112,6 +138,28 @@
       ]
     },
     "Notion Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente IA (Cerebro)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Calendar Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente IA (Cerebro)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wikipedia": {
       "ai_tool": [
         [
           {

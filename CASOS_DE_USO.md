@@ -228,6 +228,26 @@ Conecta tu voz con el mundo digital. Ejecuta tareas en tus cuentas (Email, Notio
 
 ---
 
+## 💻 CASO 12: Control de Sistema (Sysadmin Autónomo)
+
+### Descripción
+Permite a ColdTemplar traducir tus intenciones en lenguaje natural a comandos Bash y ejecutarlos directamente en el sistema anfitrión.
+
+### Ejemplos de comandos:
+```
+"Ejecuta una actualización completa del sistema"
+"Crea una carpeta llamada proyectos en mi escritorio"
+"Ejecuta un comando para ver cuánto espacio libre queda en el disco"
+"Abre el monitor del sistema"
+"Mata el proceso de Chrome que está consumiendo mucha memoria"
+```
+
+### Caso real:
+**Rober:** "Ejecuta una actualización del sistema"  
+**ColdTemplar:** "Entendido, generando comando de sistema..." *(Internamente traduce a `sudo apt update -y`, lo ejecuta y lee el resultado)*. "Comando ejecutado con éxito."
+
+---
+
 ## 📋 COMANDOS ESPECIALES
 
 | Comando | Respuesta |
